@@ -2,6 +2,11 @@
 
 Full-stack app for estimating "true demand" from Google SERP data with DataForSEO Regular Organic API.
 
+![image alt](https://github.com/Nandhagopal2912/Traffimap-lstm/blob/9384786bf681119b5f25fc25a211c049a2cadd0f/traffimap_snap.jpg)
+
+![image alt](https://github.com/Nandhagopal2912/Traffimap-lstm/blob/9384786bf681119b5f25fc25a211c049a2cadd0f/traffimap_snap.jpg)
+
+![image alt](https://github.com/Nandhagopal2912/Traffimap-lstm/blob/9384786bf681119b5f25fc25a211c049a2cadd0f/traffimap_snap.jpg)
 ## Features
 
 - FastAPI backend with `/analyze` endpoint.
