@@ -30,7 +30,8 @@ def _env_clean(value: str | None) -> str | None:
 
 # Standard (Regular) Google Organic SERP — not Advanced.
 # Docs: SERP Google Organic Live Regular — returns classic organic-style results.
-DATAFORSEO_BASE_URL = "https://api.dataforseo.com/v3/serp/google/organic/live/regular"
+DATAFORSEO_BASE_URL = "https://api.dataforseo.com/v3/serp/google/organic/live/advanced"
+DATAFORSEO_KEYWORDS_DATA_URL = "https://api.dataforseo.com/v3/keywords_data/google/search_volume/live"
 CACHE_DIR = Path(__file__).parent / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -198,6 +199,58 @@ def _fetch_dataforseo(keyword: str, location_name: str, language_name: str) -> d
 
     _raise_if_dataforseo_api_error(payload)
     return payload
+
+
+def _fetch_search_volume(keyword: str, location_name: str, language_name: str) -> float:
+    """Fetch search volume from DataForSEO keywords_data endpoint."""
+    login, password = _dataforseo_credentials()
+    
+    # Keywords API expects 'keywords' as an array, not 'keyword'
+    post_data = [{"keywords": [keyword], "location_name": location_name, "language_name": language_name}]
+    
+    try:
+        print(f"[Search Volume] Fetching volume for keyword='{keyword}'")
+        res = requests.post(
+            DATAFORSEO_KEYWORDS_DATA_URL,
+            auth=(login, password),
+            json=post_data,
+            timeout=20,
+        )
+        res.raise_for_status()
+        data = res.json()
+        
+        print(f"[Search Volume] Full API Response: {json.dumps(data, indent=2)}")
+        print(f"[Search Volume] API Response status_code: {data.get('status_code')}")
+        
+        if data.get("status_code") != 20000:
+            print(f"[Search Volume] API Error: {data.get('status_code')} - {data.get('status_message')}")
+            return 0.0
+        
+        tasks = data.get("tasks", [])
+        if not tasks:
+            print(f"[Search Volume] No tasks in response")
+            return 0.0
+        
+        task = tasks[0]
+        print(f"[Search Volume] Task keys: {task.keys()}")
+        print(f"[Search Volume] Task status_code: {task.get('status_code')}")
+        
+        results = task.get("result", [])
+        if not results:
+            print(f"[Search Volume] No results in task. Full task: {json.dumps(task, indent=2)}")
+            return 0.0
+        
+        result = results[0]
+        print(f"[Search Volume] Result: {json.dumps(result, indent=2)}")
+        search_volume = result.get("search_volume", 0.0)
+        print(f"[Search Volume] Extracted volume: {search_volume}")
+        return float(search_volume or 0.0)
+        
+    except Exception as e:
+        print(f"[Search Volume] Exception: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0.0
 
 
 def _first_result(payload: dict[str, Any]) -> dict[str, Any]:
@@ -414,10 +467,12 @@ def health_dataforseo() -> dict[str, bool]:
     return {"credentials_loaded": bool(email and password)}
 
 
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest) -> dict[str, Any]:
     key = _cache_key(request.keyword, request.location_name, request.language_name, request.mock_mode)
     cached = _load_cached_response(key)
+    
     if cached is not None:
         analysis = analyze_payload(cached, request.keyword)
         return {"source": "cache", "mock_mode": request.mock_mode, **analysis}
@@ -425,7 +480,15 @@ def analyze(request: AnalyzeRequest) -> dict[str, Any]:
     if request.mock_mode:
         payload = _build_mock_payload(request.keyword, request.location_name, request.language_name)
     else:
+        # 1. Fetch SERP structure (organic vs non-organic breakdown)
         payload = _fetch_dataforseo(request.keyword, request.location_name, request.language_name)
+        
+        # 2. Fetch search volume separately
+        volume = _fetch_search_volume(request.keyword, request.location_name, request.language_name)
+        
+        # 3. Inject volume into the payload so analyze_payload can use it
+        if payload.get("tasks") and payload["tasks"][0].get("result"):
+            payload["tasks"][0]["result"][0]["keyword_data"] = {"search_volume": volume}
 
     _save_cached_response(key, payload)
     analysis = analyze_payload(payload, request.keyword)

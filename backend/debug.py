@@ -1,3 +1,6 @@
+# this file is to have a peice of codes needed to debug the things using dummy codes and print statements to check the flow of the program and the values of the variables at different stages of the execution. It can be used to identify where the problem is occurring and what might be causing it.
+
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
