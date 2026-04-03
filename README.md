@@ -7,16 +7,28 @@ Full-stack app for estimating "true demand" from Google SERP data with DataForSE
 ![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/f058795b6f3fe8da03ac061e997cae2682a2da92/startly-1-1_Mockdata-2.jpg)
 
 ![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/f058795b6f3fe8da03ac061e997cae2682a2da92/startly-1-1_Mockdata-3.jpg)
+
 ## Features
 
-- FastAPI backend with `/analyze` endpoint.
-- Local caching in `backend/cache/` to avoid repeated paid API calls.
-- Mock mode for safe UI testing without billing.
-- Penalty rule: if any SERP item is non-organic, adjusted volume = raw volume * 0.7.
-- Saturation score: `organic_results / total_results`.
-- CSV/PDF report export from backend `/report`.
-- Next.js App Router UI with Tailwind + Chart.js.
-- Standalone Python extractor script for large JSON files.
+The Traffic Opportunity Tool combines SERP analysis and keyword intent scoring into a single workflow:
+
+- FastAPI backend with `/analyze` and `/report` endpoints.
+- Uses DataForSEO Google Organic SERP API for result classification.
+- Uses DataForSEO Keywords Data API for authoritative search volume.
+- Caching in `backend/cache/` to reduce repeated API calls and cost.
+- `mock_mode` for safe UI development without hitting external APIs.
+- SERP saturation analysis:
+  - `saturation_score = organic_results / total_results`
+  - `saturation_label` in three tiers (high organic share/mixed SERP/SERP-heavy-non-organic).
+- Non-organic penalty:
+  - If any result is non-organic (e.g., snippets, PAA, videos), adjusted volume = `raw_volume * 0.7`.
+- CSV/PDF reporting with `POST /report`.
+- Next.js + Tailwind UI with interactive result cards and charts.
+- Includes CLI JSON extractor script for offline dataset processing.
+
+## Bug-fix notes
+
+See [BUGS_AND_FIXES.md](BUGS_AND_FIXES.md) for all issues resolved in this release.
 
 ## 1) Python extractor script (special instruction)
 
@@ -27,6 +39,7 @@ python extract_serp_fields.py --input input.json --csv extracted.csv
 ```
 
 Extracted fields per item:
+
 - `domain`
 - `type`
 - `rank_group`
@@ -78,6 +91,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ## API Contract
 
 ### `POST /analyze`
+
 Request:
 
 ```json
@@ -90,6 +104,7 @@ Request:
 ```
 
 ### `POST /report`
+
 Request:
 
 ```json
