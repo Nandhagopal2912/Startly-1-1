@@ -2,11 +2,13 @@
 
 Full-stack app for estimating "true demand" from Google SERP data with DataForSEO Regular Organic API.
 
-![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/f058795b6f3fe8da03ac061e997cae2682a2da92/startly-1-1_Mockdata-1.jpg)
+![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/c2b9e988e47023a6e27bff21ea33ab5d7a61b777/images/startly-1-1_live_data-1.jpg
+)
 
-![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/f058795b6f3fe8da03ac061e997cae2682a2da92/startly-1-1_Mockdata-2.jpg)
+![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/c2b9e988e47023a6e27bff21ea33ab5d7a61b777/images/startly-1-1_live_data-2.jpg
+)
 
-![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/f058795b6f3fe8da03ac061e997cae2682a2da92/startly-1-1_Mockdata-3.jpg)
+![image alt](https://github.com/Nandhagopal2912/Startly-1-1/blob/c2b9e988e47023a6e27bff21ea33ab5d7a61b777/images/startly-1-1_live_data-3jpg.jpg)
 
 ## Features
 
