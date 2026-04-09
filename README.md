@@ -2,7 +2,8 @@
 
 A premium, data-driven SEO intelligence platform for estimating "true demand" from Google SERP data. It moves beyond raw search volume by analyzing SERP real estate saturation and applying sophisticated click-through rate (CTR) penalty models.
 
-![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/main/images/dashboard_preview.jpg)
+![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-1.jpg)
+![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-2.jpg)
 
 ## 💎 Premium Features
 
