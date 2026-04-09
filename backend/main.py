@@ -281,58 +281,83 @@ def _build_analyze_report(
     """Human-readable sections + numeric summary for UI and exports."""
     saturation_score = (organic_results / total_results) if total_results else 0.0
     non_organic_count = total_results - organic_results
-    penalty_pct = 30 if non_organic_detected else 0
-    penalty_factor = 0.7 if non_organic_detected else 1.0
-    volume_lost = round(raw_volume - adjusted_volume, 2)
+    
+    # Advanced Penalty Modeling
+    penalty_pct = 0
+    if non_organic_detected:
+        if any(t in ["answer_box", "ai_overview", "knowledge_graph"] for t in non_organic_types):
+            penalty_pct = 45  # Massive zero-click diversion
+        elif "google_ads" in non_organic_types or "shopping" in non_organic_types:
+            penalty_pct = 35  # Significant commercial diversion
+        else:
+            penalty_pct = 20  # Standard informational noise
+            
+    penalty_factor = (100 - penalty_pct) / 100
+    adj_volume = raw_volume * penalty_factor
+    volume_lost = round(raw_volume - adj_volume, 2)
     demand_per_organic = (
-        round(adjusted_volume / organic_results, 2) if organic_results else None
+        round(adj_volume / organic_results, 2) if organic_results else None
     )
 
-    if saturation_score >= 0.85:
-        sat_label = "high organic share"
-        sat_hint = "Most visible positions are standard organic listings, so competition for blue links is strong."
+    # Dynamic Labels & Sentiment
+    if saturation_score >= 0.8:
+        sat_label = "Organic Dominant"
+        sat_status = "success"
+        sat_desc = "High visibility for standard organic listings."
     elif saturation_score >= 0.5:
-        sat_label = "mixed SERP"
-        sat_hint = "Organic and non-organic result types mix; monitor which formats steal clicks."
+        sat_label = "Balanced SERP"
+        sat_status = "warning"
+        sat_desc = "Mix of organic and rich SERP elements."
     else:
-        sat_label = "SERP-heavy on non-organic"
-        sat_hint = "A large share of items are not classic organic results; expect fewer clicks on traditional results."
+        sat_label = "Saturated / Non-Organic"
+        sat_status = "danger"
+        sat_desc = "SERP is heavily dominated by special features."
 
-    if non_organic_detected:
-        penalty_body = (
-            f"At least one SERP item is not type \"organic\" (e.g. {', '.join(non_organic_types[:5])}"
-            + ("…" if len(non_organic_types) > 5 else "")
-            + "). The model reduces estimated monthly demand by 30%: "
-            f"adjusted volume = raw volume × {penalty_factor}."
-        )
-    else:
-        penalty_body = (
-            "All analyzed items are organic listings. No clickability penalty is applied; "
-            "adjusted volume equals raw search volume."
-        )
+    sections = [
+        {
+            "title": "Effective Market Demand",
+            "body": (
+                f"The initial keyword demand of {raw_volume:,.0f} searches is filtered down to an "
+                f"effective volume of {adj_volume:,.0f} due to a {penalty_pct}% SERP visibility penalty."
+            ),
+        },
+        {
+            "title": "SERP Real Estate Allocation",
+            "body": (
+                f"Classic organic links hold {saturation_score:.1%} of available SERP slots. "
+                + (f"Invocations of {', '.join(non_organic_types[:3])} compete aggressively for attention." 
+                   if non_organic_types else "This is a rare 'Blue Link' pure organic environment.")
+            ),
+        }
+    ]
 
-    interpretation = (
-        f"For “{keyword}”, monthly search volume is about {raw_volume:,.0f} (raw). "
-    )
-    if non_organic_detected:
-        interpretation += (
-            f"After a 30% penalty, “true demand” for classic organic clicks is about {adjusted_volume:,.0f}. "
+    # Pattern Injection Logic
+    if any(t in ["ai_overview", "answer_box"] for t in non_organic_types):
+        sections.append({
+            "title": "Zero-Click Search Risk",
+            "body": "Critical: Google's direct-answer modules are active. Most users will satisfy their query without clicking through to a website. Focus on deep-topic authority or high-intent conversion."
+        })
+    
+    if "google_ads" in non_organic_types:
+        sections.append({
+            "title": "Competitive Commercial Intent",
+            "body": "High-intent transactional indicators detected. While paid ads reduce organic CTR, they validate that this keyword has significant monetary value."
+        })
+
+    sections.append({
+        "title": "Listing Scalability Verdict",
+        "body": (
+            f"With {demand_per_organic:,.0f} adjusted search units available per organic ranking slot, "
+            + ("this represents a highly scalable SEO target." if (demand_per_organic or 0) > 400 
+               else "this keyword requires precision targeting to be profitable.")
         )
-    else:
-        interpretation += f"Estimated demand stays {adjusted_volume:,.0f} with no penalty. "
-    interpretation += (
-        f"Saturation is {organic_results} organic / {total_results} total = {saturation_score:.1%}. "
-    )
-    if demand_per_organic is not None:
-        interpretation += (
-            f"Roughly {demand_per_organic:,.0f} adjusted-demand units per organic slot (adjusted ÷ organic count)."
-        )
+    })
 
     return {
         "summary": {
             "keyword": keyword,
             "raw_volume": raw_volume,
-            "adjusted_volume": round(adjusted_volume, 2),
+            "adjusted_volume": round(adj_volume, 2),
             "saturation_score": round(saturation_score, 4),
             "saturation_percent": round(saturation_score * 100, 2),
             "organic_results": organic_results,
@@ -346,55 +371,10 @@ def _build_analyze_report(
             "non_organic_types": non_organic_types,
             "demand_per_organic_slot": demand_per_organic,
             "saturation_label": sat_label,
+            "saturation_status": sat_status,
+            "saturation_desc": sat_desc
         },
-        "sections": [
-            {
-                "title": "Search demand (volume)",
-                "body": (
-                    f"Raw monthly search volume from keyword data is {raw_volume:,.0f}. "
-                    f"This is the baseline demand before SERP-shape adjustments."
-                ),
-            },
-            {
-                "title": "SERP composition & saturation",
-                "body": (
-                    f"The API returned {total_results} items. Of those, {organic_results} are organic "
-                    f"and {non_organic_count} are not. Saturation score = organic ÷ total = "
-                    f"{saturation_score:.4f} ({saturation_score:.1%}). Breakdown by type: "
-                    + ", ".join(f"{k}: {v}" for k, v in sorted(type_breakdown.items(), key=lambda x: -x[1]))
-                    + f". This is a {sat_label}: {sat_hint}"
-                ),
-            },
-            {
-                "title": "Clickability penalty (non-organic items)",
-                "body": penalty_body,
-            },
-            {
-                "title": "Adjusted volume (“true demand” for organic)",
-                "body": (
-                    f"Adjusted volume is {adjusted_volume:,.2f}. "
-                    + (
-                        f"That is {volume_lost:,.2f} below raw volume due to the penalty. "
-                        if non_organic_detected
-                        else "No reduction was applied. "
-                    )
-                    + (
-                        f"Dividing by {organic_results} organic slots gives ~{demand_per_organic:,.2f} per slot."
-                        if demand_per_organic is not None
-                        else ""
-                    ),
-                ),
-            },
-            {
-                "title": "How to read this report",
-                "body": (
-                    "Higher raw volume means more people search the term. "
-                    "Higher saturation (organic share) means more of the SERP is classic rankings. "
-                    "When non-organic blocks appear, adjusted volume is discounted because clicks are diverted. "
-                    "Compare adjusted volume to organic slots to judge opportunity per listing."
-                ),
-            },
-        ],
+        "sections": sections,
     }
 
 
@@ -506,3 +486,7 @@ def report(request: ReportRequest) -> Response:
     content = generate_pdf_detailed(rows_payload)
     headers = {"Content-Disposition": "attachment; filename=traffic-opportunity-report.pdf"}
     return Response(content=content, media_type="application/pdf", headers=headers)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
