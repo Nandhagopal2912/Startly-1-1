@@ -4,16 +4,21 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from report_export import generate_csv_detailed, generate_pdf_detailed
+from supabase_config import get_supabase_client, get_supabase_service_client
+from auth import AuthHandler
+from tasks import TaskManager
+from redis_cache import set_cache, get_cache, cache_search_result, get_search_cache
+from redis_cache import cache_serp_analysis, get_serp_analysis
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 # Load backend/.env first, then optional cwd .env (helps if uvicorn cwd differs).
@@ -72,9 +77,91 @@ class ReportRequest(BaseModel):
     format: Literal["csv", "pdf"] = "csv"
 
 
+# ============ NEW: Auth & Task Models ============
+
+class OAuthCallbackRequest(BaseModel):
+    provider: str = Field(..., min_length=1)
+    code: str = Field(..., min_length=1)
+
+
+class OAuthCallbackResponse(BaseModel):
+    access_token: str
+    refresh_token: Optional[str] = None
+    user: dict[str, Any]
+
+
+class OAuthUrlRequest(BaseModel):
+    provider: str = Field(..., min_length=1)
+
+
+class OAuthUrlResponse(BaseModel):
+    oauth_url: str
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    company: Optional[str] = None
+
+
+class TaskCreateRequest(BaseModel):
+    keyword: str = Field(..., min_length=1)
+    location_name: str = "United States"
+    search_volume: Optional[int] = None
+    ctr_percentage: Optional[float] = None
+    zero_click_risk: Optional[float] = None
+    commercial_intent: Optional[float] = None
+    traffic_opportunity: Optional[float] = None
+    verdict: Optional[str] = None
+    full_results: Optional[dict[str, Any]] = None
+
+
+class TaskResponse(BaseModel):
+    id: str
+    user_id: str
+    keyword: str
+    location_name: str
+    search_volume: Optional[int] = None
+    traffic_opportunity: Optional[float] = None
+    verdict: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class UserStatsResponse(BaseModel):
+    total_analyses: int
+    average_traffic_opportunity: float
+    recent_tasks: list[TaskResponse]
+
+
 def _cache_key(keyword: str, location_name: str, language_name: str, mock_mode: bool) -> str:
     base = f"{keyword.strip().lower()}::{location_name.strip().lower()}::{language_name.strip().lower()}::{mock_mode}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
+# ============ NEW: Dependency Function ============
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    """Extract and verify user from Authorization header"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    
+    try:
+        # Format: "Bearer <token>"
+        parts = authorization.split(" ")
+        if len(parts) != 2 or parts[0] != "Bearer":
+            raise ValueError("Invalid authorization format")
+        token = parts[1]
+        
+        user = AuthHandler.get_current_user(token)
+        if not user:
+            raise ValueError("Invalid or expired token")
+        
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 
 def _load_cached_response(key: str) -> dict[str, Any] | None:
@@ -446,6 +533,159 @@ def health_dataforseo() -> dict[str, bool]:
     password = _env_clean(os.getenv("DATAFORSEO_PASSWORD"))
     return {"credentials_loaded": bool(email and password)}
 
+
+# ============ NEW: OAuth & Authentication Endpoints ============
+
+@app.get("/auth/providers")
+def get_oauth_providers() -> dict[str, Any]:
+    """Get available OAuth providers"""
+    return {"providers": AuthHandler.get_oauth_providers()}
+
+
+@app.post("/auth/oauth-url")
+def get_oauth_url(request: OAuthUrlRequest) -> OAuthUrlResponse:
+    """Get OAuth redirect URL for the selected provider"""
+    try:
+        oauth_url = AuthHandler.get_oauth_url(request.provider)
+        return OAuthUrlResponse(oauth_url=oauth_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Unable to build OAuth URL: {e}")
+
+
+@app.post("/auth/callback")
+def oauth_callback(request: OAuthCallbackRequest) -> OAuthCallbackResponse:
+    """Handle OAuth callback from provider"""
+    try:
+        result = AuthHandler.handle_oauth_callback(request.provider, request.code)
+        return OAuthCallbackResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
+
+
+@app.get("/auth/me")
+def get_current_user_profile(current_user: dict = Depends(get_current_user)) -> UserProfile:
+    """Get current authenticated user profile"""
+    return UserProfile(**current_user)
+
+
+@app.get("/auth/logout")
+def logout(authorization: Optional[str] = Header(None)) -> dict[str, str]:
+    """Logout user (invalidate token)"""
+    # Token validation happens in the header, just return success
+    return {"message": "Logged out successfully"}
+
+
+# ============ NEW: Task/Analysis Endpoints ============
+
+@app.post("/tasks")
+def create_task(
+    request: TaskCreateRequest,
+    current_user: dict = Depends(get_current_user)
+) -> TaskResponse:
+    """Create a new analysis task"""
+    try:
+        task = TaskManager.create_task(
+            user_id=current_user["id"],
+            keyword=request.keyword,
+            location_name=request.location_name,
+            search_volume=request.search_volume,
+            ctr_percentage=request.ctr_percentage,
+            zero_click_risk=request.zero_click_risk,
+            commercial_intent=request.commercial_intent,
+            traffic_opportunity=request.traffic_opportunity,
+            verdict=request.verdict,
+            full_results=request.full_results
+        )
+        return TaskResponse(**task)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create task: {str(e)}")
+
+
+@app.get("/tasks")
+def list_user_tasks(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Get user's analysis history"""
+    tasks = TaskManager.get_user_tasks(current_user["id"], limit=limit, offset=offset)
+    return {
+        "tasks": [TaskResponse(**t) for t in tasks],
+        "total": len(tasks),
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@app.get("/tasks/{task_id}")
+def get_task(
+    task_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> TaskResponse:
+    """Get specific task details"""
+    task = TaskManager.get_task(task_id, current_user["id"])
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return TaskResponse(**task)
+
+
+@app.get("/tasks/{task_id}/download")
+def download_task_report(
+    task_id: str,
+    format: Literal["csv", "pdf"] = "pdf",
+    current_user: dict = Depends(get_current_user)
+) -> Response:
+    """Download task report in specified format"""
+    task = TaskManager.get_task(task_id, current_user["id"])
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    full_results = task.get("full_results", {})
+    rows = [DetailedReportRow(
+        keyword=task["keyword"],
+        raw_volume=task.get("search_volume", 0),
+        adjusted_volume=full_results.get("summary", {}).get("adjusted_volume", 0),
+        traffic_opportunity=task.get("traffic_opportunity", 0),
+        report=full_results
+    )]
+    
+    report_req = ReportRequest(rows=rows, format=format)
+    return report(report_req)
+
+
+@app.delete("/tasks/{task_id}")
+def delete_task(
+    task_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> dict[str, str]:
+    """Delete a task"""
+    success = TaskManager.delete_task(task_id, current_user["id"])
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted successfully"}
+
+
+@app.get("/stats")
+def get_user_statistics(
+    current_user: dict = Depends(get_current_user)
+) -> UserStatsResponse:
+    """Get user statistics and analytics"""
+    stats = TaskManager.get_user_stats(current_user["id"])
+    return UserStatsResponse(**stats)
+
+
+@app.get("/search")
+def search_tasks(
+    keyword: str,
+    current_user: dict = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Search user's tasks by keyword"""
+    tasks = TaskManager.search_tasks(current_user["id"], keyword)
+    return {
+        "keyword": keyword,
+        "results": [TaskResponse(**t) for t in tasks],
+        "count": len(tasks)
+    }
 
 
 @app.post("/analyze")
