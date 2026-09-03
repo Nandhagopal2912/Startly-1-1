@@ -29,7 +29,7 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 cp .env.example .env
 ```
-Set your `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`  and `set up it with your won api` in `.env`.
+Set your `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`  and `set up it with your own api` in `.env`.
 
 Run the API:
 ```bash
