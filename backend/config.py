@@ -31,7 +31,7 @@ def env_int(name: str, default: int) -> int:
 
 
 def serp_provider_name() -> str:
-    """Which SERP source to use: serper | dataforseo | mock."""
+    """Which SERP source to use: serper | serpapi | dataforseo | mock."""
     return (env_clean("SERP_PROVIDER") or "serper").lower()
 
 

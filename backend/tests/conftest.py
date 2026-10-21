@@ -24,7 +24,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(cache, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(usage, "_USAGE_FILE", tmp_path / "usage.json")
     monkeypatch.setattr(usage, "_LOG_FILE", tmp_path / "api_calls.log")
-    for name in ("SERPER_API_KEY", "DATAFORSEO_EMAIL", "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"):
+    for name in ("SERPER_API_KEY", "SERPAPI_API_KEY","DATAFORSEO_EMAIL", "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SERP_PROVIDER", "serper")
     monkeypatch.setenv("VOLUME_PROVIDER", "none")

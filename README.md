@@ -30,7 +30,8 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 Choose a data source in `.env`:
-- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev), or
+- `SERP_PROVIDER=serpapi` with a free `SERPAPI_API_KEY` from [serpapi.com](https://serpapi.com) (250 searches/month). **Recommended:** it is the only free option here that detects AI Overviews, or
+- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev). It is cheaper, but it doesn't return AI Overviews, so the zero-click penalty is never applied, or
 - `SERP_PROVIDER=dataforseo` with `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`, or
 - `SERP_PROVIDER=mock` to develop without any key.
 

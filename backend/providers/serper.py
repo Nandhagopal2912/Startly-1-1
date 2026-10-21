@@ -44,7 +44,7 @@ BLOCK_FEATURES = {
 }
 
 
-def _domain(url: str | None) -> str | None:
+def domain_of(url: str | None) -> str | None:
     if not url:
         return None
     host = urlparse(url).netloc.lower()
@@ -59,7 +59,7 @@ def normalize(data: dict[str, Any], keyword: str) -> dict[str, Any]:
     if isinstance(answer, dict) and answer:
         # A snippet quoting a page still sends some clicks; a bare answer usually doesn't.
         kind = "featured_snippet" if answer.get("link") else "answer_box"
-        items.append({"type": kind, "rank_group": 0, "domain": _domain(answer.get("link"))})
+        items.append({"type": kind, "rank_group": 0, "domain": domain_of(answer.get("link"))})
 
     for key, item_type in BLOCK_FEATURES.items():
         if data.get(key):
@@ -71,7 +71,7 @@ def normalize(data: dict[str, Any], keyword: str) -> dict[str, Any]:
                 items.append({
                     "type": item_type,
                     "rank_group": entry.get("position"),
-                    "domain": _domain(entry.get("link")),
+                    "domain": domain_of(entry.get("link")),
                 })
 
     return snapshot(keyword, SerperProvider.name, items)

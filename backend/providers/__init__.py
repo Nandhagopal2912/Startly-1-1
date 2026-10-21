@@ -6,10 +6,12 @@ from config import serp_provider_name, volume_provider_name
 from providers.base import SerpProvider, VolumeProvider
 from providers.dataforseo import DataForSeoProvider
 from providers.mock import MockProvider
+from providers.serpapi import SerpApiProvider
 from providers.serper import SerperProvider
 
 _SERP_PROVIDERS: dict[str, type] = {
     "serper": SerperProvider,
+    "serpapi": SerpApiProvider,
     "dataforseo": DataForSeoProvider,
     "mock": MockProvider,
 }

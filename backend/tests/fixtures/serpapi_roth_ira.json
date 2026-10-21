@@ -1,0 +1,31 @@
+{
+  "search_metadata": {"id": "test", "status": "Success"},
+  "search_parameters": {"engine": "google", "q": "what is a roth ira", "gl": "us", "hl": "en"},
+  "ai_overview": {
+    "text_blocks": [
+      {"type": "paragraph", "snippet": "A Roth IRA is an individual retirement account funded with after-tax money...", "reference_indexes": [0, 1]}
+    ],
+    "references": [
+      {"title": "Roth IRAs", "link": "https://www.irs.gov/retirement-plans/roth-iras", "source": "IRS", "index": 0},
+      {"title": "What Is a Roth IRA?", "link": "https://www.example-finance.com/roth-ira", "source": "Example Finance", "index": 1}
+    ]
+  },
+  "ads": [
+    {"position": 1, "title": "Open a Roth IRA Today", "link": "https://www.broker-a.com/roth"}
+  ],
+  "related_questions": [
+    {"question": "How does a Roth IRA work?"},
+    {"question": "Who is eligible for a Roth IRA?"}
+  ],
+  "organic_results": [
+    {"position": 1, "title": "Roth IRAs | Internal Revenue Service", "link": "https://www.irs.gov/retirement-plans/roth-iras"},
+    {"position": 2, "title": "What Is a Roth IRA?", "link": "https://www.example-finance.com/roth-ira"},
+    {"position": 3, "title": "Roth IRA Explained", "link": "https://www.broker-b.com/roth-ira"},
+    {"position": 4, "title": "Roth IRA Rules", "link": "https://money.example.org/roth-rules"},
+    {"position": 5, "title": "Roth vs Traditional IRA", "link": "https://www.compare.example.net/roth-vs-traditional"},
+    {"position": 6, "title": "Roth IRA Calculator", "link": "https://calc.example.com/roth"},
+    {"position": 7, "title": "Roth IRA Guide", "link": "https://www.guide.example.io/roth"},
+    {"position": 8, "title": "Roth IRA - Wikipedia", "link": "https://en.wikipedia.org/wiki/Roth_IRA"}
+  ],
+  "related_searches": [{"query": "roth ira vs 401k"}]
+}
