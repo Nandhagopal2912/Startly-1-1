@@ -67,7 +67,7 @@ def test_empty_results_are_not_an_error(monkeypatch):
     assert SerpApiProvider().fetch_serp("zzqx", "United States", "English")["items"] == []
 
 
-def test_end_to_end_ai_overview_gets_zero_click_penalty(monkeypatch):
+def test_end_to_end_ai_overview_reduces_clicks(monkeypatch):
     monkeypatch.setenv("SERP_PROVIDER", "serpapi")
     monkeypatch.setenv("SERPAPI_API_KEY", "k")
     sent = []
@@ -80,8 +80,10 @@ def test_end_to_end_ai_overview_gets_zero_click_penalty(monkeypatch):
 
     body = TestClient(app).post("/analyze", json={"keyword": "what is a roth ira", "search_volume": 10000}).json()
     assert body["provider"] == "serpapi"
-    assert body["report"]["summary"]["penalty_percent"] == 45
-    assert body["adjusted_volume"] == 5500
+    assert body["report"]["summary"]["penalty_percent"] == 51
+    assert (body["capturable_clicks_low"], body["capturable_clicks"], body["capturable_clicks_high"]) == (2103, 2243, 2384)
+    positions = body["report"]["click_model"]["positions"]
+    assert len(positions) == 8 and positions[0]["position"] == 1
     assert "Zero-Click Search Risk" in [s["title"] for s in body["report"]["sections"]]
     assert sent[0]["engine"] == "google" and sent[0]["gl"] == "us"
     assert usage.calls_today() == 1

@@ -88,6 +88,17 @@ def connect() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# Columns added after the first release: (table, column, definition). Applied once to older databases.
+ADDED_COLUMNS = [
+    ("analyses", "capturable_clicks_low", "REAL"),
+    ("analyses", "capturable_clicks_high", "REAL"),
+]
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        for table, column, definition in ADDED_COLUMNS:
+            existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

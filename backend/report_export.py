@@ -15,6 +15,10 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 
+def _blank_if_none(value: Any) -> Any:
+    return "" if value is None else value
+
+
 def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
     output = io.StringIO()
     writer = csv.writer(output)
@@ -45,17 +49,20 @@ def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
             "Keyword",
             "Raw volume",
             "Volume source",
-            "Adjusted volume",
+            "Capturable clicks",
+            "Clicks (low)",
+            "Clicks (high)",
+            "Organic CTR % (page one)",
             "Saturation score (0–1)",
             "Saturation %",
             "Organic results",
             "Non-organic count",
             "Total SERP items",
-            "Penalty applied",
-            "Penalty %",
-            "Penalty factor",
-            "Volume reduction",
-            "Demand / organic slot",
+            "Features reduce clicks",
+            "Click loss % (vs plain page)",
+            "Click retention factor",
+            "Volume minus clicks",
+            "Clicks / organic slot",
             "Saturation label",
             "Source",
             "Mock mode",
@@ -70,7 +77,10 @@ def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
                 row.get("keyword", summary.get("keyword", "")),
                 summary.get("raw_volume", row.get("raw_volume", "")),
                 row.get("volume_source", ""),
-                summary.get("adjusted_volume", row.get("adjusted_volume", "")),
+                _blank_if_none(summary.get("capturable_clicks", row.get("adjusted_volume", ""))),
+                _blank_if_none(summary.get("capturable_clicks_low")),
+                _blank_if_none(summary.get("capturable_clicks_high")),
+                summary.get("organic_ctr_total", ""),
                 summary.get("saturation_score", row.get("saturation_score", "")),
                 summary.get("saturation_percent", ""),
                 summary.get("organic_results", row.get("organic_results", "")),
@@ -86,6 +96,27 @@ def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
                 row.get("mock_mode", ""),
             ]
         )
+
+    writer.writerow([])
+    writer.writerow(["CLICKS BY POSITION (click model estimate)"])
+    writer.writerow(["Keyword", "Position", "CTR %", "CTR % (low)", "CTR % (high)", "Clicks", "Clicks (low)", "Clicks (high)"])
+    for row in rows:
+        rep = row.get("report") or {}
+        kw = row.get("keyword", (rep.get("summary") or {}).get("keyword", ""))
+        for p in (rep.get("click_model") or {}).get("positions") or []:
+            writer.writerow([
+                kw, p.get("position"), p.get("ctr"), p.get("ctr_low"), p.get("ctr_high"),
+                _blank_if_none(p.get("clicks")), _blank_if_none(p.get("clicks_low")), _blank_if_none(p.get("clicks_high")),
+            ])
+
+    writer.writerow([])
+    writer.writerow(["CLICK MODEL FACTORS (sources)"])
+    writer.writerow(["Keyword", "Feature", "Effect at #1 (%)", "Confidence", "Source", "URL"])
+    for row in rows:
+        rep = row.get("report") or {}
+        kw = row.get("keyword", (rep.get("summary") or {}).get("keyword", ""))
+        for f in (rep.get("click_model") or {}).get("factors") or []:
+            writer.writerow([kw, f.get("label"), f.get("position_1_effect_percent"), f.get("confidence"), f.get("source"), f.get("url")])
 
     writer.writerow([])
     writer.writerow(["SERP TYPE BREAKDOWN (chart data — counts per type)"])
@@ -231,15 +262,23 @@ def generate_pdf_detailed(rows: list[dict[str, Any]]) -> bytes:
 
         card_w = (content_w - 24) / 4
         card_h = 52
+        clicks = summary.get("capturable_clicks")
+        lo, hi = summary.get("capturable_clicks_low"), summary.get("capturable_clicks_high")
+        if clicks is None:
+            clicks_text = f"{summary.get('organic_ctr_total', 0)}% of searches"
+        elif lo is not None and hi is not None and lo != hi:
+            clicks_text = f"{clicks:,.0f} ({lo:,.0f}-{hi:,.0f})"
+        else:
+            clicks_text = f"{clicks:,.0f}"
         cards = [
-            ("Raw monthly volume", f"{raw_v:,.0f}"),
-            ("Adjusted volume", f"{adj_v:,.0f}"),
+            ("Raw monthly volume", f"{raw_v:,.0f}" if row.get("volume_source") != "unknown" else "—"),
+            ("Capturable organic clicks", clicks_text),
             (
                 "Saturation score",
                 f"{float(summary.get('saturation_percent', 0)):.1f}% ({org}/{total} organic)",
             ),
             (
-                "Demand / organic slot",
+                "Clicks / organic slot",
                 f"{summary.get('demand_per_organic_slot') if summary.get('demand_per_organic_slot') is not None else '—'}",
             ),
         ]
@@ -262,7 +301,7 @@ def generate_pdf_detailed(rows: list[dict[str, Any]]) -> bytes:
 
         chart_titles_y = y
         p.setFont("Helvetica", 8)
-        p.drawString(left, chart_titles_y, "Raw vs adjusted demand")
+        p.drawString(left, chart_titles_y, "Search volume vs capturable clicks")
         p.drawString(left + 300, chart_titles_y, "Organic vs non-organic (items)")
         d1 = _drawing_raw_vs_adjusted(raw_v, adj_v)
         d2 = _drawing_organic_split(org, non_org)

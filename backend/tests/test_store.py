@@ -91,3 +91,33 @@ def test_json_cache_is_imported_once(tmp_path, monkeypatch):
     migrate_cache.import_json_cache()  # second run finds nothing new
     with connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM serp_snapshots").fetchone()[0] == 2
+
+
+def test_history_stores_click_range():
+    client.post("/analyze", json={"keyword": "gamma", "mock_mode": True, "search_volume": 10000})
+    row = client.get("/history?limit=1").json()[0]
+    assert row["capturable_clicks_low"] is not None
+    assert row["capturable_clicks_low"] <= row["adjusted_volume"] <= row["capturable_clicks_high"]
+
+
+def test_old_database_gets_new_columns(tmp_path, monkeypatch):
+    import sqlite3
+
+    import db
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.execute(
+        "CREATE TABLE analyses (id INTEGER PRIMARY KEY, keyword TEXT NOT NULL, location TEXT NOT NULL, "
+        "language TEXT NOT NULL, snapshot_id INTEGER, provider TEXT NOT NULL, raw_volume REAL NOT NULL, "
+        "volume_source TEXT NOT NULL, adjusted_volume REAL NOT NULL, penalty_percent INTEGER NOT NULL, "
+        "organic_results INTEGER NOT NULL, total_results INTEGER NOT NULL, created_at TEXT NOT NULL)"
+    )
+    old.execute("INSERT INTO analyses VALUES (1,'old','us','en',NULL,'serper',100,'user',55,45,6,10,'2026-01-01')")
+    old.commit()
+    old.close()
+
+    monkeypatch.setattr(db, "DB_PATH", path)
+    db.init_db()
+    rows = store.recent_analyses(5)
+    assert rows[0]["keyword"] == "old" and rows[0]["capturable_clicks_low"] is None

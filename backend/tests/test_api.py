@@ -49,8 +49,9 @@ def test_serper_flow_with_user_volume_and_cache(monkeypatch):
     body = res.json()
     assert body["provider"] == "serper"
     assert body["volume_source"] == "user"
-    assert body["report"]["summary"]["penalty_percent"] == 45  # knowledge graph present
-    assert body["adjusted_volume"] == 5500
+    # Only the 2 ads cost clicks; knowledge panel, snippet and PAA are neutral in the click model.
+    assert body["report"]["summary"]["penalty_percent"] == 13
+    assert body["capturable_clicks"] == body["adjusted_volume"] == 3902
     assert calls[0]["gl"] == "us"
 
     cached = client.post("/analyze", json={"keyword": "best crm software", "search_volume": 10000})
@@ -78,3 +79,11 @@ def test_exports_include_volume_source():
     assert "Volume source" in csv and ",user," in csv
     pdf = client.post("/report", json={"rows": [row], "format": "pdf"})
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+
+def test_csv_export_includes_click_positions_and_sources():
+    row = client.post("/analyze", json={"keyword": "crm", "mock_mode": True, "search_volume": 5000}).json()
+    csv = client.post("/report", json={"rows": [row], "format": "csv"}).text
+    assert "CLICKS BY POSITION" in csv
+    assert "Capturable clicks" in csv
+    assert "CLICK MODEL FACTORS" in csv

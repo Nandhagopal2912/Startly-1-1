@@ -85,11 +85,13 @@ def record_analysis(
     with connect() as conn:
         conn.execute(
             "INSERT INTO analyses (keyword, location, language, snapshot_id, provider, raw_volume, volume_source, "
-            "adjusted_volume, penalty_percent, organic_results, total_results, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "adjusted_volume, capturable_clicks_low, capturable_clicks_high, penalty_percent, organic_results, "
+            "total_results, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 analysis["keyword"], location, language, snapshot_id, provider,
                 analysis["raw_volume"], analysis["volume_source"], analysis["adjusted_volume"],
+                analysis.get("capturable_clicks_low"), analysis.get("capturable_clicks_high"),
                 summary["penalty_percent"], analysis["organic_results"], analysis["total_results"], utc_now(),
             ),
         )
@@ -99,7 +101,7 @@ def recent_analyses(limit: int = 50) -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
             "SELECT keyword, location, language, provider, raw_volume, volume_source, adjusted_volume, "
-            "penalty_percent, organic_results, total_results, created_at "
+            "capturable_clicks_low, capturable_clicks_high, penalty_percent, organic_results, total_results, created_at "
             "FROM analyses ORDER BY created_at DESC, id DESC LIMIT ?",
             (limit,),
         ).fetchall()
