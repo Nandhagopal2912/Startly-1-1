@@ -1,6 +1,6 @@
 # Startly Analyze: Traffic Opportunity Tool
 
-A premium, data-driven SEO intelligence platform for estimating "true demand" from Google SERP data. It moves beyond raw search volume by analyzing SERP real estate saturation and applying sophisticated click-through rate (CTR) penalty models.
+An SEO tool that estimates how many searchers would actually click an organic result for a keyword. It reads the live Google results page (AI Overviews, ads, maps, organic links) and applies published click-through-rate data to turn search volume into **capturable organic clicks**, with a range and a per-position breakdown.
 
 ![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-1.jpg)
 ![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-2.jpg)
@@ -8,15 +8,14 @@ A premium, data-driven SEO intelligence platform for estimating "true demand" fr
 ## 💎 Premium Features
 
 *   **Advanced Dashboard UI**: A modern, high-fidelity interface inspired by Linear and Vercel, featuring glassmorphism, responsive charts, and real-time animations.
-*   **Intelligent Growth Verdicts**: Dynamic analysis ascribing categorical opportunity scores (0-100) based on SERP accessibility.
-*   **Sophisticated Penalty Modeling**:
-    *   **Zero-Click Risk**: Detects AI Overviews and Answer Boxes to penalize volume by up to 45%.
-    *   **Commercial Intent**: Identifies Paid Ads and Shopping modules to model transactional value.
-    *   **Scalability Metrics**: Calculates adjusted demand per organic slot to judge SEO ROI.
-*   **Dual-API Engine**:
-    *   **DataForSEO SERP API**: Detailed structure analysis of organic vs. non-organic listings.
-    *   **DataForSEO Keywords API**: High-authority search volume retrieval.
-*   **Intelligence Logs**: Comprehensive history of analyzed keywords with persistent metrics.
+*   **Position-Based Click Model**:
+    *   **Capturable Clicks**: Monthly organic clicks on page one, shown as an estimate with a low–high range.
+    *   **Clicks by Position**: What ranking #1, #2, #3… is worth for this keyword.
+    *   **Sourced Effects**: AI Overviews, local packs, image packs and ads reduce clicks by amounts taken from published CTR studies, each labelled with its confidence and source.
+    *   **Zero-Click Risk**: Flags pages where Google answers the query itself.
+*   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode, chosen in `.env`.
+*   **Cost Guardrails**: Local SQLite cache, remembered volumes, and a daily cap on paid API calls.
+*   **Intelligence Logs**: History of analyzed keywords, stored locally and available at `GET /history`.
 *   **Professional Reporting**: Integrated PDF and CSV export engine for stakeholder presentations.
 
 ## 🚀 Quick Start
@@ -31,7 +30,7 @@ cp .env.example .env
 ```
 Choose a data source in `.env`:
 - `SERP_PROVIDER=serpapi` with a free `SERPAPI_API_KEY` from [serpapi.com](https://serpapi.com) (250 searches/month). **Recommended:** it is the only free option here that detects AI Overviews, or
-- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev). It is cheaper, but it doesn't return AI Overviews, so the zero-click penalty is never applied, or
+- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev). It is cheaper, but it doesn't return AI Overviews, so their effect on clicks is never applied, or
 - `SERP_PROVIDER=dataforseo` with `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`, or
 - `SERP_PROVIDER=mock` to develop without any key.
 
@@ -60,15 +59,17 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## 🧠 Methodology
 
-Startly Analyze doesn't just show you how many people search for a term—it shows you how many people will actually click on an organic result.
+Startly shows how many people would actually click an organic result, not just how many search.
 
-1.  **Raw Volume**: Baseline data from Keywords API.
-2.  **SERP Parsing**: Every item on the first page of Google is decomposed by type (Organic vs. Non-Organic).
-3.  **Intelligence Modeling**: We apply weighted clickability penalties based on specific SERP modules:
-    *   **45% Penalty (High Risk)**: For "Zero-Click" modules like AI Overviews, Knowledge Graphs, and Answer Boxes.
-    *   **35% Penalty (Commercial)**: For Google Ads and Shopping results that divert top-of-page traffic.
-    *   **20% Penalty (Standard)**: For informational modules like Images, People Also Ask, and Video carousels.
-4.  **Adjusted Demand**: The final "True Demand" metric is calculated by applying these penalties to the raw market volume.
+1.  **Search volume**: Entered by you or fetched from DataForSEO.
+2.  **SERP parsing**: Every item on Google's first page is classified (organic, AI Overview, ads, local pack, images, People Also Ask…).
+3.  **Baseline click curve**: The share of searches that click each organic position, from [Advanced Web Ranking's CTR study](https://www.advancedwebranking.com/seo/organic-ctr) (19.4% at #1 down to 0.8% at #10).
+4.  **Feature effects**: Features that measurably take clicks scale the positions they affect. For example, an AI Overview cuts position 1 by about 52%. People Also Ask and videos carry no penalty, because the data shows none.
+5.  **Range**: Overlapping features are combined two ways (stacked vs strongest only) to give a low–high range around the estimate.
+
+For example, "what is a roth ira" at 10,000 searches a month comes out at about **2,060 capturable clicks (range 1,919–2,200)**.
+
+The full method, every number and its source, a worked example and the limitations are in **[METHODOLOGY.md](METHODOLOGY.md)**.
 
 ---
 
