@@ -36,6 +36,7 @@ import {
 import { cn, formatNumber } from "../lib/utils";
 import { InsightsPanel, type FullReport } from "../components/AnalyzeReport";
 import { LoadingOverlay } from "../components/LoadingOverlay";
+import { ClicksByPosition } from "../components/ClicksByPosition";
 
 ChartJS.register(
   CategoryScale, 
@@ -62,6 +63,9 @@ type AnalysisRow = {
   mock_mode: boolean;
   provider?: string;
   volume_source?: string;
+  capturable_clicks?: number | null;
+  capturable_clicks_low?: number | null;
+  capturable_clicks_high?: number | null;
   report?: FullReport;
 };
 
@@ -176,14 +180,14 @@ export default function HomePage() {
       labels: rows.map((r) => r.keyword),
       datasets: [
         {
-          label: "Raw Volume",
-          data: rows.map((r) => r.raw_volume),
+          label: "Search Volume",
+          data: rows.map((r) => (hasVolume(r) ? r.raw_volume : 0)),
           backgroundColor: "#3b82f6",
           borderRadius: 6,
         },
         {
-          label: "Adjusted Demand",
-          data: rows.map((r) => r.adjusted_volume),
+          label: "Capturable Clicks",
+          data: rows.map((r) => (hasVolume(r) ? r.capturable_clicks ?? r.adjusted_volume : 0)),
           backgroundColor: "#6366f1",
           borderRadius: 6,
         }
@@ -208,30 +212,19 @@ export default function HomePage() {
             </div>
           </div>
 
-          <form onSubmit={onAnalyze} className="flex flex-1 max-w-2xl px-8">
-            <div className="relative w-full group">
+          <form onSubmit={onAnalyze} className="flex flex-1 items-center gap-2 max-w-2xl px-8">
+            <div className="relative flex-1 min-w-0 group">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                 <Search size={18} />
               </div>
               <input
                 type="text"
-                className="w-full h-11 pl-11 pr-56 rounded-2xl border border-slate-200 bg-slate-100/50 backdrop-blur-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                className="w-full h-11 pl-11 pr-44 rounded-2xl border border-slate-200 bg-slate-100/50 backdrop-blur-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                 placeholder="Analyze keyword opportunity..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
               <div className="absolute inset-y-1.5 right-1.5 flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={0}
-                  inputMode="numeric"
-                  aria-label="Monthly search volume (optional)"
-                  title="Monthly search volume, e.g. from Google Keyword Planner. Leave empty to use the API's volume."
-                  placeholder="Volume"
-                  value={volume}
-                  onChange={(e) => setVolume(e.target.value)}
-                  className="w-20 h-full px-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                />
                 <button
                   type="button"
                   onClick={() => setMockMode(!mockMode)}
@@ -251,6 +244,17 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
+            <input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              aria-label="Monthly search volume (optional)"
+              title="Monthly search volume, e.g. from Google Keyword Planner. Leave empty to use the saved or API volume."
+              placeholder="Volume"
+              value={volume}
+              onChange={(e) => setVolume(e.target.value)}
+              className="w-24 shrink-0 h-11 px-3 rounded-2xl border border-slate-200 bg-slate-100/50 text-sm text-slate-700 shadow-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+            />
           </form>
 
           <div className="flex items-center gap-4">
@@ -333,9 +337,9 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-center justify-center h-40 w-40 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 shadow-inner group shrink-0">
-                    <div className="text-[11px] uppercase font-black tracking-widest text-white/70 mb-1">Score</div>
-                    <div className="text-5xl font-black transition-transform group-hover:scale-110 duration-500">{(100 - (selectedRow.saturation_score * 100)).toFixed(0)}</div>
-                    <div className="text-[10px] font-bold opacity-60 mt-1">PERCENTILE</div>
+                    <div className="text-[11px] uppercase font-black tracking-widest text-white/70 mb-1">Clicks kept</div>
+                    <div className="text-5xl font-black transition-transform group-hover:scale-110 duration-500">{100 - (selectedRow.report?.summary.penalty_percent ?? 0)}%</div>
+                    <div className="text-[10px] font-bold opacity-60 mt-1 text-center px-4">VS A PLAIN PAGE</div>
                   </div>
                 </div>
                 {/* Decorative Elements */}
@@ -351,30 +355,30 @@ export default function HomePage() {
                   value={hasVolume(selectedRow) ? formatNumber(selectedRow.raw_volume) : "—"}
                   trend={volumeLabel(selectedRow.volume_source)}
                   status={hasVolume(selectedRow) ? "neutral" : "warning"}
-                  description={hasVolume(selectedRow) ? "Monthly search baseline" : "Enter a volume to estimate demand"}
+                  description={hasVolume(selectedRow) ? "Monthly searches" : "Enter a volume to estimate clicks"}
                 />
                 <KPICard
                   icon={<Zap />}
-                  title="Adjusted Demand"
-                  value={hasVolume(selectedRow) ? formatNumber(selectedRow.adjusted_volume) : "—"}
+                  title="Capturable Clicks"
+                  value={clicksValue(selectedRow)}
                   trend={`-${selectedRow.report?.summary.penalty_percent ?? 0}%`}
                   status={selectedRow.penalty_applied ? "warning" : "success"}
-                  description="Estimated organic capture"
+                  description={clicksDescription(selectedRow)}
                 />
                 <KPICard
                   icon={<Layers />}
-                  title="Saturation"
+                  title="Organic Share"
                   value={`${(selectedRow.saturation_score * 100).toFixed(1)}%`}
                   trend={`${selectedRow.organic_results}/${selectedRow.total_results} organic`}
-                  status={selectedRow.saturation_score > 0.6 ? "danger" : selectedRow.saturation_score > 0.4 ? "warning" : "success"}
-                  description="SERP organic density"
+                  status={selectedRow.saturation_score >= 0.8 ? "success" : selectedRow.saturation_score >= 0.5 ? "warning" : "danger"}
+                  description="Page-one items that are organic links"
                 />
                 <KPICard
                   icon={<Info />}
-                  title="Opportunity"
+                  title="Clicks per Slot"
                   value={hasVolume(selectedRow) ? (selectedRow.report?.summary.demand_per_organic_slot?.toFixed(0) ?? "—") : "—"}
                   status="success"
-                  description="Demand per organic slot"
+                  description="Average clicks per organic result"
                 />
               </div>
 
@@ -383,52 +387,14 @@ export default function HomePage() {
                 {/* Visualizations */}
                 <div className="lg:col-span-2 space-y-8">
                   <div className="glass-card rounded-[2.5rem] p-10 border border-slate-200/60 shadow-xl shadow-slate-200/50">
-                    <div className="flex items-center justify-between mb-10">
-                      <div>
-                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Demand Compression</h3>
-                        <p className="text-sm text-slate-400 font-medium">Raw vs. Adjusted Monthly Volume</p>
+                    {selectedRow.report?.click_model ? (
+                      <ClicksByPosition model={selectedRow.report.click_model} hasVolume={hasVolume(selectedRow)} />
+                    ) : (
+                      <div className="py-16 text-center">
+                        <Info size={32} className="mx-auto mb-4 text-slate-200" />
+                        <p className="text-sm text-slate-400 font-bold">Analyze this keyword again to see clicks by position.</p>
                       </div>
-                      <div className="flex gap-2 p-1.5 rounded-2xl bg-slate-50 border border-slate-100">
-                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white shadow-sm text-[10px] font-black text-slate-600">
-                           <div className="h-2 w-2 rounded-full bg-blue-500" /> RAW
-                         </div>
-                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-400">
-                           <div className="h-2 w-2 rounded-full bg-indigo-500" /> ADJUSTED
-                         </div>
-                      </div>
-                    </div>
-                    <div className="h-[420px]">
-                      <Bar 
-                        data={{
-                          labels: ['Keyword Engagement'],
-                          datasets: [
-                            {
-                              label: 'Raw Volume',
-                              data: [selectedRow.raw_volume],
-                              backgroundColor: '#3b82f6',
-                              borderRadius: 16,
-                              barThickness: 80,
-                            },
-                            {
-                              label: 'Adjusted Demand',
-                              data: [selectedRow.adjusted_volume],
-                              backgroundColor: '#6366f1',
-                              borderRadius: 16,
-                              barThickness: 80,
-                            }
-                          ]
-                        }}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: { legend: { display: false } },
-                          scales: {
-                            y: { grid: { color: "#f1f5f9" }, border: { display: false }, ticks: { font: { size: 10, weight: 'bold' }, color: '#94a3b8' } },
-                            x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 10, weight: 'bold' }, color: '#94a3b8' } }
-                          }
-                        }}
-                      />
-                    </div>
+                    )}
                   </div>
 
                   {/* Competitive Landscape */}
@@ -440,7 +406,7 @@ export default function HomePage() {
                     >
                       <div className="mb-8">
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">Market Landscape</h3>
-                        <p className="text-sm text-slate-400 font-medium">Relative performance across analyzed keywords</p>
+                        <p className="text-sm text-slate-400 font-medium">Search volume vs. clicks you could actually capture</p>
                       </div>
                       <div className="h-80">
                          <Bar 
@@ -569,10 +535,10 @@ export default function HomePage() {
                     <thead>
                       <tr className="bg-slate-50/50 text-[11px] font-black text-slate-400 uppercase tracking-widest">
                         <th className="px-10 py-5">Keyword Profile</th>
-                        <th className="px-10 py-5 text-right">Market Vol.</th>
-                        <th className="px-10 py-5 text-right">Capture Pot.</th>
-                        <th className="px-10 py-5 text-center">Sat. Index</th>
-                        <th className="px-10 py-5 text-center">Opportunity</th>
+                        <th className="px-10 py-5 text-right">Volume</th>
+                        <th className="px-10 py-5 text-right">Clicks</th>
+                        <th className="px-10 py-5 text-center">Organic Share</th>
+                        <th className="px-10 py-5 text-center">Click Access</th>
                         <th className="px-10 py-5 text-right">Metrics</th>
                       </tr>
                     </thead>
@@ -602,7 +568,12 @@ export default function HomePage() {
                             <div className="text-[10px] font-semibold text-slate-400">{volumeLabel(row.volume_source)}</div>
                           </td>
                           <td className="px-10 py-6 text-right font-black text-slate-900 tabular-nums">
-                            {hasVolume(row) ? formatNumber(row.adjusted_volume) : "—"}
+                            {clicksValue(row)}
+                            {hasVolume(row) && row.capturable_clicks_low != null && row.capturable_clicks_low !== row.capturable_clicks_high && (
+                              <div className="text-[10px] font-semibold text-slate-400">
+                                {formatNumber(row.capturable_clicks_low)}–{formatNumber(row.capturable_clicks_high ?? 0)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-10 py-6 text-center">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100/50 text-xs font-black text-slate-600 border border-slate-100">
@@ -612,9 +583,9 @@ export default function HomePage() {
                           <td className="px-10 py-6 text-center">
                             <div className={cn(
                               "inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider",
-                              row.saturation_score < 0.3 ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : row.saturation_score < 0.6 ? "bg-amber-100 text-amber-700 border border-amber-200" : "bg-rose-100 text-rose-700 border border-rose-200"
+                              clickTier(row).className
                             )}>
-                              {row.saturation_score < 0.3 ? "High Tier" : row.saturation_score < 0.6 ? "Moderate" : "Saturated"}
+                              {clickTier(row).label}
                             </div>
                           </td>
                           <td className="px-10 py-6 text-right">
@@ -672,6 +643,28 @@ function volumeLabel(source?: string) {
 
 function hasVolume(row: AnalysisRow) {
   return row.volume_source !== "unknown";
+}
+
+function clicksValue(row: AnalysisRow) {
+  return hasVolume(row) && row.capturable_clicks != null ? formatNumber(row.capturable_clicks) : "—";
+}
+
+function clicksDescription(row: AnalysisRow) {
+  const { capturable_clicks_low: low, capturable_clicks_high: high } = row;
+  if (!hasVolume(row) || row.capturable_clicks == null) {
+    const ctr = row.report?.summary.organic_ctr_total;
+    return ctr != null ? `${ctr.toFixed(1)}% of searches click organic` : "Enter a volume to estimate clicks";
+  }
+  if (low != null && high != null && low !== high) return `Range ${formatNumber(low)}–${formatNumber(high)} a month`;
+  return "Monthly organic clicks on page one";
+}
+
+// Tier by how many clicks SERP features take, compared with a plain results page.
+function clickTier(row: AnalysisRow) {
+  const loss = row.report?.summary.penalty_percent ?? 0;
+  if (loss < 25) return { label: "Open", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
+  if (loss < 50) return { label: "Contested", className: "bg-amber-100 text-amber-700 border border-amber-200" };
+  return { label: "Click-hostile", className: "bg-rose-100 text-rose-700 border border-rose-200" };
 }
 
 function KPICard({

@@ -29,13 +29,45 @@ export type ReportSummary = {
   saturation_label: string;
   saturation_status?: 'success' | 'warning' | 'danger';
   saturation_desc?: string;
+  capturable_clicks?: number | null;
+  capturable_clicks_low?: number | null;
+  capturable_clicks_high?: number | null;
+  organic_ctr_total?: number;
 };
 
 export type ReportSection = { title: string; body: string };
 
+export type ClickPosition = {
+  position: number;
+  ctr: number;
+  ctr_low: number;
+  ctr_high: number;
+  clicks: number | null;
+  clicks_low: number | null;
+  clicks_high: number | null;
+};
+
+export type ClickFactor = {
+  feature: string;
+  label: string;
+  position_1_effect_percent: number;
+  confidence: "high" | "medium" | "low";
+  source: string;
+  url: string;
+};
+
+export type ClickModel = {
+  positions: ClickPosition[];
+  factors: ClickFactor[];
+  neutral_features: string[];
+  low_confidence_factors: string[];
+  baseline_source: { name: string; url: string };
+};
+
 export type FullReport = {
   summary: ReportSummary;
   sections: ReportSection[];
+  click_model?: ClickModel;
 };
 
 export function InsightsPanel({ sections }: { sections: ReportSection[] }) {
@@ -45,7 +77,7 @@ export function InsightsPanel({ sections }: { sections: ReportSection[] }) {
     if (t.includes('serp') || t.includes('layout')) return <Layout size={18} />;
     if (t.includes('risk')) return <AlertTriangle size={18} />;
     if (t.includes('commercial') || t.includes('intent')) return <DollarSign size={18} />;
-    if (t.includes('scalability') || t.includes('verdict')) return <BarChart2 size={18} />;
+    if (t.includes('scalability') || t.includes('verdict') || t.includes('position')) return <BarChart2 size={18} />;
     return <Target size={18} />;
   };
 
