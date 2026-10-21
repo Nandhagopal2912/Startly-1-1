@@ -44,6 +44,7 @@ def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
         [
             "Keyword",
             "Raw volume",
+            "Volume source",
             "Adjusted volume",
             "Saturation score (0–1)",
             "Saturation %",
@@ -68,6 +69,7 @@ def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
             [
                 row.get("keyword", summary.get("keyword", "")),
                 summary.get("raw_volume", row.get("raw_volume", "")),
+                row.get("volume_source", ""),
                 summary.get("adjusted_volume", row.get("adjusted_volume", "")),
                 summary.get("saturation_score", row.get("saturation_score", "")),
                 summary.get("saturation_percent", ""),
@@ -204,6 +206,8 @@ def generate_pdf_detailed(rows: list[dict[str, Any]]) -> bytes:
         src = row.get("source", "")
         mock = row.get("mock_mode", False)
         p.drawString(left, y, f"Source: {src}  ·  {'Mock data' if mock else 'Live API'}")
+        y -= 14
+        p.drawString(left, y, f"Volume source: {row.get('volume_source') or 'not recorded'}")
         y -= 28
 
         if not summary:

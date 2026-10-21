@@ -146,6 +146,7 @@ export default function HomePage() {
           rows: rows.map((r) => ({
             keyword: r.keyword,
             raw_volume: r.raw_volume,
+            volume_source: r.volume_source ?? "",
             adjusted_volume: r.adjusted_volume,
             saturation_score: r.saturation_score,
             organic_results: r.organic_results,
@@ -344,35 +345,34 @@ export default function HomePage() {
 
               {/* KPI Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <KPICard 
+                <KPICard
                   icon={<BarChart3 />}
                   title="Raw Volume"
-                  value={formatNumber(selectedRow.raw_volume)}
-                  trend="+12%"
-                  status="neutral"
-                  description="Monthly search baseline"
+                  value={hasVolume(selectedRow) ? formatNumber(selectedRow.raw_volume) : "—"}
+                  trend={volumeLabel(selectedRow.volume_source)}
+                  status={hasVolume(selectedRow) ? "neutral" : "warning"}
+                  description={hasVolume(selectedRow) ? "Monthly search baseline" : "Enter a volume to estimate demand"}
                 />
-                <KPICard 
+                <KPICard
                   icon={<Zap />}
                   title="Adjusted Demand"
-                  value={formatNumber(selectedRow.adjusted_volume)}
-                  trend={selectedRow.penalty_applied ? "-30%" : "0%"}
+                  value={hasVolume(selectedRow) ? formatNumber(selectedRow.adjusted_volume) : "—"}
+                  trend={`-${selectedRow.report?.summary.penalty_percent ?? 0}%`}
                   status={selectedRow.penalty_applied ? "warning" : "success"}
                   description="Estimated organic capture"
                 />
-                <KPICard 
+                <KPICard
                   icon={<Layers />}
                   title="Saturation"
                   value={`${(selectedRow.saturation_score * 100).toFixed(1)}%`}
-                  trend="+2%"
+                  trend={`${selectedRow.organic_results}/${selectedRow.total_results} organic`}
                   status={selectedRow.saturation_score > 0.6 ? "danger" : selectedRow.saturation_score > 0.4 ? "warning" : "success"}
                   description="SERP organic density"
                 />
-                <KPICard 
+                <KPICard
                   icon={<Info />}
                   title="Opportunity"
-                  value={selectedRow.report?.summary.demand_per_organic_slot?.toFixed(0) ?? "—"}
-                  trend="+15%"
+                  value={hasVolume(selectedRow) ? (selectedRow.report?.summary.demand_per_organic_slot?.toFixed(0) ?? "—") : "—"}
                   status="success"
                   description="Demand per organic slot"
                 />
@@ -500,11 +500,11 @@ export default function HomePage() {
                                 backgroundColor: [
                                   '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#f0f9ff'
                                 ],
-                                borderWidth: 0,
-                                cutout: '82%'
+                                borderWidth: 0
                               }]
                             }}
                             options={{
+                              cutout: '82%',
                               responsive: true,
                               maintainAspectRatio: false,
                               plugins: { legend: { display: false } }
@@ -598,10 +598,11 @@ export default function HomePage() {
                             </div>
                           </td>
                           <td className="px-10 py-6 text-right font-bold text-slate-500 tabular-nums">
-                            {formatNumber(row.raw_volume)}
+                            {hasVolume(row) ? formatNumber(row.raw_volume) : "—"}
+                            <div className="text-[10px] font-semibold text-slate-400">{volumeLabel(row.volume_source)}</div>
                           </td>
                           <td className="px-10 py-6 text-right font-black text-slate-900 tabular-nums">
-                            {formatNumber(row.adjusted_volume)}
+                            {hasVolume(row) ? formatNumber(row.adjusted_volume) : "—"}
                           </td>
                           <td className="px-10 py-6 text-center">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100/50 text-xs font-black text-slate-600 border border-slate-100">
@@ -657,7 +658,23 @@ export default function HomePage() {
   );
 }
 
-function KPICard({ 
+const VOLUME_LABELS: Record<string, string> = {
+  user: "Your entry",
+  dataforseo: "DataForSEO",
+  mock: "Mock data",
+  api: "API",
+  unknown: "No volume",
+};
+
+function volumeLabel(source?: string) {
+  return VOLUME_LABELS[source ?? "unknown"] ?? source ?? "No volume";
+}
+
+function hasVolume(row: AnalysisRow) {
+  return row.volume_source !== "unknown";
+}
+
+function KPICard({
   icon, 
   title, 
   value, 
@@ -668,7 +685,7 @@ function KPICard({
   icon: React.ReactNode; 
   title: string; 
   value: string; 
-  trend: string;
+  trend?: string;
   status: 'success' | 'warning' | 'danger' | 'neutral';
   description: string;
 }) {
@@ -679,7 +696,7 @@ function KPICard({
     neutral: 'bg-indigo-50 text-indigo-600 border-indigo-100'
   };
 
-  const trendIcon = trend.startsWith('+') ? <TrendingUp size={12} /> : <TrendingDown size={12} />;
+  const trendIcon = trend?.startsWith('+') ? <TrendingUp size={12} /> : trend?.startsWith('-') ? <TrendingDown size={12} /> : null;
 
   return (
     <div className="glass-card rounded-[2.5rem] p-8 border border-slate-200/60 bg-white hover:scale-[1.03] transition-all cursor-default group shadow-lg hover:shadow-2xl shadow-slate-200/50">
@@ -687,14 +704,16 @@ function KPICard({
         <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center transition-transform group-hover:rotate-12 group-hover:scale-110 border shadow-sm", statusStyles[status])}>
           {icon}
         </div>
-        <div className={cn(
-          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black transition-all",
-          trend.startsWith('+') && status === 'success' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30" :
-          trend.startsWith('-') && status === 'warning' ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30" :
-          "bg-slate-100 text-slate-500 border border-slate-200"
-        )}>
-          {trendIcon} {trend}
-        </div>
+        {trend && (
+          <div className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black transition-all",
+            trend.startsWith('+') && status === 'success' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30" :
+            trend.startsWith('-') && status === 'warning' ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30" :
+            "bg-slate-100 text-slate-500 border border-slate-200"
+          )}>
+            {trendIcon} {trend}
+          </div>
+        )}
       </div>
       <div className="space-y-1.5">
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{title}</h4>

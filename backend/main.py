@@ -53,6 +53,7 @@ class DetailedReportRow(BaseModel):
 
     keyword: str
     raw_volume: float = 0
+    volume_source: str = ""
     adjusted_volume: float = 0
     saturation_score: float = 0
     organic_results: int = 0

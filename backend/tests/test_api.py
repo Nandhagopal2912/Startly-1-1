@@ -70,3 +70,11 @@ def test_provider_health():
     assert body["serp_provider"] == "serper"
     assert body["serp_configured"] is False
     assert body["volume_provider"] == "none"
+
+
+def test_exports_include_volume_source():
+    row = client.post("/analyze", json={"keyword": "crm", "mock_mode": True, "search_volume": 900}).json()
+    csv = client.post("/report", json={"rows": [row], "format": "csv"}).text
+    assert "Volume source" in csv and ",user," in csv
+    pdf = client.post("/report", json={"rows": [row], "format": "pdf"})
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
