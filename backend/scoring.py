@@ -142,8 +142,12 @@ def build_analyze_report(
 
 
 def analyze_payload(
-    payload: dict[str, Any], keyword_fallback: str, volume_override: float | None = None
+    payload: dict[str, Any],
+    keyword_fallback: str,
+    volume_override: float | None = None,
+    volume_source: str = "user",
 ) -> dict[str, Any]:
+    """Score a snapshot. `volume_override` (labelled `volume_source`) wins over volume stored in the payload."""
     result = first_result(payload)
     items = result.get("items", [])
     if not isinstance(items, list):
@@ -168,7 +172,6 @@ def analyze_payload(
 
     if volume_override is not None:
         raw_volume = float(volume_override)
-        volume_source = "user"
     else:
         keyword_data = result.get("keyword_data") or {}
         stored = keyword_data.get("search_volume") if isinstance(keyword_data, dict) else None

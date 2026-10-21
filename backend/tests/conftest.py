@@ -17,13 +17,11 @@ def load_fixture(name: str) -> dict:
 
 @pytest.fixture(autouse=True)
 def isolated_state(tmp_path, monkeypatch):
-    """Point cache + usage files at a temp dir and clear real API settings, so tests never spend credits."""
-    import cache
-    import usage
+    """Use a temp SQLite database and clear real API settings, so tests never touch real data or spend credits."""
+    import db
 
-    monkeypatch.setattr(cache, "CACHE_DIR", tmp_path)
-    monkeypatch.setattr(usage, "_USAGE_FILE", tmp_path / "usage.json")
-    monkeypatch.setattr(usage, "_LOG_FILE", tmp_path / "api_calls.log")
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
     for name in ("SERPER_API_KEY", "SERPAPI_API_KEY","DATAFORSEO_EMAIL", "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SERP_PROVIDER", "serper")

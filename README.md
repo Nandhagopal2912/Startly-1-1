@@ -37,6 +37,8 @@ Choose a data source in `.env`:
 
 Serper doesn't provide search volume, so type it into the **Volume** box (for example, from Google Keyword Planner), or set `VOLUME_PROVIDER=dataforseo`. `MAX_API_CALLS_PER_DAY` (default 50) stops a bug from draining your credits.
 
+Results are stored in a local SQLite database at `backend/data/startly.db` (created automatically; not committed). Each keyword is fetched again after `CACHE_TTL_DAYS` (default 7). Volumes you type in are remembered, and past analyses are listed at `GET /history`.
+
 Run the tests (no API calls, no keys needed):
 ```bash
 pip install -r requirements-dev.txt

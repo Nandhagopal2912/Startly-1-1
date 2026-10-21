@@ -11,3 +11,6 @@ node_modules/
 # Env
 .env
 backend/.env
+
+# SQLite database
+backend/data/

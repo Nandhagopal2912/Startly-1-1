@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import config
-from cache import cache_key, load_cached_response, save_cached_response
+import store
+from db import init_db
+from migrate_cache import import_json_cache
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
 from report_export import generate_csv_detailed, generate_pdf_detailed
@@ -18,7 +21,15 @@ from usage import calls_today
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="Traffic Opportunity API", version="1.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    import_json_cache()
+    yield
+
+
+app = FastAPI(title="Traffic Opportunity API", version="1.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,26 +68,35 @@ class ReportRequest(BaseModel):
     format: Literal["csv", "pdf"] = "csv"
 
 
-def _fetch_snapshot(request: AnalyzeRequest) -> dict[str, Any]:
-    provider = get_serp_provider("mock" if request.mock_mode else None)
-    snapshot = provider.fetch_serp(request.keyword, request.location_name, request.language_name)
+def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
+    """Volume and its source; (None, "") means use whatever the snapshot itself carries."""
+    kw, loc, lang = request.keyword, request.location_name, request.language_name
+    if request.search_volume is not None:
+        # Remember it, so the next analysis of this keyword doesn't need it typed again.
+        store.save_volume(kw, loc, lang, request.search_volume, "user")
+        return request.search_volume, "user"
 
-    # Skip the paid volume call when the user supplied a number or the provider already had one.
-    if request.mock_mode or request.search_volume is not None or snapshot["keyword_data"]:
-        return snapshot
+    stored = store.get_volume(kw, loc, lang)
+    if stored is not None:
+        return stored
+
+    # Mock snapshots and pre-SQLite cache imports carry their own volume.
+    if request.mock_mode or (snapshot.get("keyword_data") or {}).get("search_volume") is not None:
+        return None, ""
 
     volume_provider = get_volume_provider()
     if volume_provider is None or not volume_provider.is_configured():
-        return snapshot
+        return None, ""
     try:
-        volume = volume_provider.fetch_volume(request.keyword, request.location_name, request.language_name)
+        volume = volume_provider.fetch_volume(kw, loc, lang)
     except HTTPException as exc:
         # The SERP is still useful without volume; don't throw away a paid call.
-        log.warning("Volume lookup failed for %r: %s", request.keyword, exc.detail)
-        return snapshot
-    if volume is not None:
-        snapshot["keyword_data"] = {"search_volume": volume, "source": volume_provider.name}
-    return snapshot
+        log.warning("Volume lookup failed for %r: %s", kw, exc.detail)
+        return None, ""
+    if volume is None:
+        return None, ""
+    store.save_volume(kw, loc, lang, volume, volume_provider.name)
+    return volume, volume_provider.name
 
 
 @app.get("/health")
@@ -107,21 +127,31 @@ def health_dataforseo() -> dict[str, bool]:
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest) -> dict[str, Any]:
-    key = cache_key(request.keyword, request.location_name, request.language_name, request.mock_mode)
-    payload = load_cached_response(key)
-    source = "cache"
-    if payload is None:
-        payload = _fetch_snapshot(request)
-        save_cached_response(key, payload)
+    kw, loc, lang = request.keyword, request.location_name, request.language_name
+    found = store.latest_snapshot(kw, loc, lang, request.mock_mode)
+    if found is not None:
+        snapshot_id, payload = found
+        source = "cache"
+    else:
+        provider = get_serp_provider("mock" if request.mock_mode else None)
+        payload = provider.fetch_serp(kw, loc, lang)
+        snapshot_id = store.save_snapshot(kw, loc, lang, request.mock_mode, payload)
         source = "api"
 
-    analysis = analyze_payload(payload, request.keyword, volume_override=request.search_volume)
-    return {
-        "source": source,
-        "mock_mode": request.mock_mode,
-        "provider": payload.get("provider", "dataforseo"),
-        **analysis,
-    }
+    volume, volume_source = _resolve_volume(request, payload)
+    analysis = analyze_payload(payload, kw, volume_override=volume, volume_source=volume_source)
+    provider_name = str(payload.get("provider") or "dataforseo")
+    store.record_analysis(
+        keyword=analysis["keyword"], location=loc, language=lang,
+        snapshot_id=snapshot_id, provider=provider_name, analysis=analysis,
+    )
+    return {"source": source, "mock_mode": request.mock_mode, "provider": provider_name, **analysis}
+
+
+@app.get("/history")
+def history(limit: int = Query(50, ge=1, le=500)) -> list[dict[str, Any]]:
+    """Most recent analyses, newest first."""
+    return store.recent_analyses(limit)
 
 
 @app.post("/report")

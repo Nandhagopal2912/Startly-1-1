@@ -2,45 +2,33 @@
 
 from __future__ import annotations
 
-import json
-import threading
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import HTTPException
 
-from config import CACHE_DIR, daily_api_cap
-
-_USAGE_FILE = CACHE_DIR / "usage.json"
-_LOG_FILE = CACHE_DIR / "api_calls.log"
-_lock = threading.Lock()
+from config import daily_api_cap
+from db import connect, utc_now
 
 
-def _today() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
-def _read_usage(path: Path) -> dict[str, int]:
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except json.JSONDecodeError:
-        return {}
+def _start_of_today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00+00:00")
 
 
 def calls_today() -> int:
-    return int(_read_usage(_USAGE_FILE).get(_today(), 0))
+    with connect() as conn:
+        row = conn.execute("SELECT COUNT(*) FROM api_calls WHERE called_at >= ?", (_start_of_today(),)).fetchone()
+    return int(row[0])
 
 
 def record_call(provider: str, endpoint: str, keyword: str) -> None:
     """Count one paid call; raise 429 instead if today's cap is already used up."""
     cap = daily_api_cap()
-    with _lock:
-        usage = _read_usage(_USAGE_FILE)
-        today = _today()
-        used = int(usage.get(today, 0))
+    with connect() as conn:
+        # Take the write lock before counting so two requests can't both slip under the cap.
+        conn.execute("BEGIN IMMEDIATE")
+        used = int(conn.execute(
+            "SELECT COUNT(*) FROM api_calls WHERE called_at >= ?", (_start_of_today(),)
+        ).fetchone()[0])
         if used >= cap:
             raise HTTPException(
                 status_code=429,
@@ -49,13 +37,7 @@ def record_call(provider: str, endpoint: str, keyword: str) -> None:
                     "or raise MAX_API_CALLS_PER_DAY in backend/.env."
                 ),
             )
-        usage[today] = used + 1
-        _USAGE_FILE.write_text(json.dumps(usage, indent=2), encoding="utf-8")
-        entry = {
-            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "provider": provider,
-            "endpoint": endpoint,
-            "keyword": keyword,
-        }
-        with _LOG_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
+        conn.execute(
+            "INSERT INTO api_calls (provider, endpoint, keyword, called_at) VALUES (?, ?, ?, ?)",
+            (provider, endpoint, keyword, utc_now()),
+        )
