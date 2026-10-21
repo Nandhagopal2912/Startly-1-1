@@ -1,0 +1,25 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "result": [
+        {
+          "keyword": "running shoes",
+          "items": [
+            {"type": "paid", "rank_group": 1, "domain": "shop-a.com"},
+            {"type": "shopping", "rank_group": 1, "domain": null},
+            {"type": "organic", "rank_group": 1, "domain": "brand-a.com"},
+            {"type": "organic", "rank_group": 2, "domain": "brand-b.com"},
+            {"type": "people_also_ask", "rank_group": 1, "domain": null},
+            {"type": "organic", "rank_group": 3, "domain": "review-c.com"},
+            {"type": "organic", "rank_group": 4, "domain": "store-d.com"},
+            {"type": "organic", "rank_group": 5, "domain": "blog-e.com"}
+          ]
+        }
+      ]
+    }
+  ]
+}

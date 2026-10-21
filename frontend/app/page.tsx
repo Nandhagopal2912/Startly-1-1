@@ -60,12 +60,15 @@ type AnalysisRow = {
   penalty_applied: boolean;
   source: string;
   mock_mode: boolean;
+  provider?: string;
+  volume_source?: string;
   report?: FullReport;
 };
 
 export default function HomePage() {
   const [keyword, setKeyword] = useState("");
   const [mockMode, setMockMode] = useState(false);
+  const [volume, setVolume] = useState("");
   const [loading, setLoading] = useState(false);
   const [pageReady, setPageReady] = useState(false);
   const [error, setError] = useState("");
@@ -104,7 +107,8 @@ export default function HomePage() {
           keyword: keyword.trim(),
           location_name: "United States",
           language_name: "English",
-          mock_mode: mockMode
+          mock_mode: mockMode,
+          search_volume: volume.trim() === "" ? null : Number(volume)
         })
       });
       
@@ -122,6 +126,7 @@ export default function HomePage() {
       setRows((prev) => [json, ...prev.filter((r) => r.keyword !== json.keyword)]);
       setSelectedKeyword(json.keyword);
       setKeyword("");
+      setVolume("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -209,12 +214,23 @@ export default function HomePage() {
               </div>
               <input
                 type="text"
-                className="w-full h-11 pl-11 pr-32 rounded-2xl border border-slate-200 bg-slate-100/50 backdrop-blur-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                className="w-full h-11 pl-11 pr-56 rounded-2xl border border-slate-200 bg-slate-100/50 backdrop-blur-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                 placeholder="Analyze keyword opportunity..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
               <div className="absolute inset-y-1.5 right-1.5 flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  aria-label="Monthly search volume (optional)"
+                  title="Monthly search volume, e.g. from Google Keyword Planner. Leave empty to use the API's volume."
+                  placeholder="Volume"
+                  value={volume}
+                  onChange={(e) => setVolume(e.target.value)}
+                  className="w-20 h-full px-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                />
                 <button
                   type="button"
                   onClick={() => setMockMode(!mockMode)}

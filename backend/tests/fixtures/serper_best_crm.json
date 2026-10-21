@@ -1,0 +1,27 @@
+{
+  "searchParameters": {"q": "best crm software", "gl": "us", "hl": "en", "type": "search", "num": 10, "engine": "google"},
+  "answerBox": {
+    "title": "Best CRM Software of 2026",
+    "link": "https://www.example-reviews.com/best-crm",
+    "snippet": "Our top picks for CRM software this year..."
+  },
+  "knowledgeGraph": {"title": "Customer relationship management", "type": "Topic"},
+  "ads": [
+    {"title": "CRM for Small Business", "link": "https://www.crm-one.com/", "position": 1},
+    {"title": "Try Our CRM Free", "link": "https://crm-two.io/trial", "position": 2}
+  ],
+  "organic": [
+    {"title": "The 10 Best CRM Software", "link": "https://www.example-reviews.com/best-crm", "position": 1},
+    {"title": "Best CRM Software 2026", "link": "https://www.techsite.com/crm", "position": 2},
+    {"title": "CRM Comparison", "link": "https://compare.example.org/crm", "position": 3},
+    {"title": "Top CRM Tools", "link": "https://www.blog.example.net/crm-tools", "position": 4},
+    {"title": "CRM Buyer's Guide", "link": "https://guide.example.com/crm", "position": 5},
+    {"title": "Free CRM Options", "link": "https://www.freecrm.example.com/", "position": 6},
+    {"title": "CRM Reviews", "link": "https://reviews.example.io/crm", "position": 7}
+  ],
+  "peopleAlsoAsk": [
+    {"question": "What is the best CRM for a small business?", "link": "https://example.com/a"},
+    {"question": "Is there a free CRM?", "link": "https://example.com/b"}
+  ],
+  "relatedSearches": [{"query": "free crm software"}, {"query": "crm examples"}]
+}

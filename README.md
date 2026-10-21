@@ -29,7 +29,18 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 cp .env.example .env
 ```
-Set your `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`  and `set up it with your own api` in `.env`.
+Choose a data source in `.env`:
+- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev), or
+- `SERP_PROVIDER=dataforseo` with `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`, or
+- `SERP_PROVIDER=mock` to develop without any key.
+
+Serper doesn't provide search volume, so type it into the **Volume** box (for example, from Google Keyword Planner), or set `VOLUME_PROVIDER=dataforseo`. `MAX_API_CALLS_PER_DAY` (default 50) stops a bug from draining your credits.
+
+Run the tests (no API calls, no keys needed):
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
 
 Run the API:
 ```bash
