@@ -80,29 +80,70 @@ def save_volume(keyword: str, location: str, language: str, volume: float, sourc
 
 def record_analysis(
     *, keyword: str, location: str, language: str, snapshot_id: int, provider: str, analysis: dict[str, Any]
-) -> None:
+) -> tuple[int, str]:
+    """Save an analysis (summary columns + the full response as JSON). Returns (id, created_at)."""
     summary = analysis["report"]["summary"]
+    created_at = utc_now()
     with connect() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO analyses (keyword, location, language, snapshot_id, provider, raw_volume, volume_source, "
             "adjusted_volume, capturable_clicks_low, capturable_clicks_high, penalty_percent, organic_results, "
-            "total_results, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "total_results, created_at, result) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 analysis["keyword"], location, language, snapshot_id, provider,
                 analysis["raw_volume"], analysis["volume_source"], analysis["adjusted_volume"],
                 analysis.get("capturable_clicks_low"), analysis.get("capturable_clicks_high"),
-                summary["penalty_percent"], analysis["organic_results"], analysis["total_results"], utc_now(),
+                summary["penalty_percent"], analysis["organic_results"], analysis["total_results"], created_at,
+                json.dumps(analysis),
             ),
         )
+        return int(cur.lastrowid), created_at
 
 
-def recent_analyses(limit: int = 50) -> list[dict[str, Any]]:
+_SUMMARY_COLUMNS = (
+    "id, keyword, location, language, provider, raw_volume, volume_source, adjusted_volume, "
+    "capturable_clicks_low, capturable_clicks_high, penalty_percent, organic_results, total_results, created_at"
+)
+
+
+def recent_analyses(limit: int = 50, offset: int = 0, query: str | None = None) -> list[dict[str, Any]]:
+    """Analysis summaries, newest first; `query` filters by keyword substring (case-insensitive)."""
+    # exact = the full result was saved, so reopening shows it unchanged (older rows are re-scored on open)
+    sql = f"SELECT {_SUMMARY_COLUMNS}, result IS NOT NULL AS exact FROM analyses"
+    params: list[Any] = []
+    if query and query.strip():
+        sql += " WHERE lower(keyword) LIKE ? ESCAPE '!'"
+        escaped = norm(query).replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        params.append(f"%{escaped}%")
+    sql += " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
     with connect() as conn:
-        rows = conn.execute(
-            "SELECT keyword, location, language, provider, raw_volume, volume_source, adjusted_volume, "
-            "capturable_clicks_low, capturable_clicks_high, penalty_percent, organic_results, total_results, created_at "
-            "FROM analyses ORDER BY created_at DESC, id DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+        rows = conn.execute(sql, params).fetchall()
+    return [{**dict(r), "exact": bool(r["exact"])} for r in rows]
+
+
+def analysis_row(analysis_id: int) -> dict[str, Any] | None:
+    """One analyses row including the stored JSON result (None for analyses saved before it existed)."""
+    with connect() as conn:
+        row = conn.execute(
+            f"SELECT {_SUMMARY_COLUMNS}, snapshot_id, result FROM analyses WHERE id = ?", (analysis_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def latest_analysis_ids(limit: int = 20, after_id: int = 0) -> list[int]:
+    """Newest analysis id per keyword/location/language (ids above `after_id` only), most recent first."""
+    sql = (
+        "SELECT MAX(id) AS id FROM analyses WHERE id > ? "
+        "GROUP BY lower(keyword), location, language ORDER BY id DESC LIMIT ?"
+    )
+    params: list[Any] = [after_id, limit]
+    with connect() as conn:
+        return [int(r["id"]) for r in conn.execute(sql, params).fetchall()]
+
+
+def snapshot_by_id(snapshot_id: int) -> dict[str, Any] | None:
+    with connect() as conn:
+        row = conn.execute("SELECT payload FROM serp_snapshots WHERE id = ?", (snapshot_id,)).fetchone()
+    return json.loads(row["payload"]) if row else None

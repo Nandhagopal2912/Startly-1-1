@@ -16,6 +16,9 @@ export type AnalysisRow = {
   capturable_clicks?: number | null;
   capturable_clicks_low?: number | null;
   capturable_clicks_high?: number | null;
+  analysis_id?: number;
+  analyzed_at?: string;
+  rescored?: boolean;
   report?: FullReport;
 };
 
@@ -50,9 +53,33 @@ export function clicksDescription(row: AnalysisRow) {
 }
 
 // Tier by how many clicks SERP features take, compared with a plain results page.
-export function clickTier(row: AnalysisRow) {
-  const loss = row.report?.summary.penalty_percent ?? 0;
+export function tierForLoss(loss: number) {
   if (loss < 25) return { label: "Open", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
   if (loss < 50) return { label: "Contested", className: "bg-amber-100 text-amber-700 border border-amber-200" };
   return { label: "Click-hostile", className: "bg-rose-100 text-rose-700 border border-rose-200" };
+}
+
+export function clickTier(row: AnalysisRow) {
+  return tierForLoss(row.report?.summary.penalty_percent ?? 0);
+}
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+// Per-browser marker: analyses up to this id were cleared from the dashboard (history keeps them).
+const CLEARED_KEY = "startly.dashboardClearedAfterId";
+
+export function readClearedAfterId(): number {
+  try {
+    return Number(window.localStorage.getItem(CLEARED_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function writeClearedAfterId(id: number) {
+  try {
+    window.localStorage.setItem(CLEARED_KEY, String(id));
+  } catch {
+    /* storage unavailable: clearing just won't survive a refresh */
+  }
 }

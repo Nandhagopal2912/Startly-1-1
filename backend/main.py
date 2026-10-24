@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -13,6 +13,7 @@ import store
 from analysis import AnalyzeRequest, run_analysis
 from bulk import BulkRequest, bulk_analyze, bulk_preview
 from db import init_db
+from history import get_full_analysis, latest_full_analyses
 from migrate_cache import import_json_cache
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
@@ -102,9 +103,31 @@ def bulk_analyze_endpoint(request: BulkRequest) -> dict[str, Any]:
 
 
 @app.get("/history")
-def history(limit: int = Query(50, ge=1, le=500)) -> list[dict[str, Any]]:
-    """Most recent analyses, newest first."""
-    return store.recent_analyses(limit)
+def history(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    q: str | None = Query(None, max_length=200),
+) -> list[dict[str, Any]]:
+    """Analysis summaries, newest first; `q` filters by keyword."""
+    return store.recent_analyses(limit, offset, q)
+
+
+@app.get("/history/latest")
+def history_latest(
+    limit: int = Query(20, ge=1, le=100),
+    after_id: int = Query(0, ge=0, description="Only analyses with a higher id (e.g. after the dashboard was cleared)"),
+) -> list[dict[str, Any]]:
+    """Full results for the newest analysis of each recent keyword (restores the dashboard; no API calls)."""
+    return latest_full_analyses(limit, after_id)
+
+
+@app.get("/history/{analysis_id}")
+def history_item(analysis_id: int) -> dict[str, Any]:
+    """One saved analysis, exactly as it was shown."""
+    result = get_full_analysis(analysis_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No saved analysis with id {analysis_id}.")
+    return result
 
 
 @app.post("/report")

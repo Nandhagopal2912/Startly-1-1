@@ -92,6 +92,7 @@ def connect() -> Iterator[sqlite3.Connection]:
 ADDED_COLUMNS = [
     ("analyses", "capturable_clicks_low", "REAL"),
     ("analyses", "capturable_clicks_high", "REAL"),
+    ("analyses", "result", "TEXT"),  # full /analyze response as JSON, so history can reopen it exactly
 ]
 
 

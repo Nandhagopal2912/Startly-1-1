@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BarElement,
   CategoryScale,
@@ -38,7 +39,17 @@ import { InsightsPanel, type FullReport } from "../components/AnalyzeReport";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { ClicksByPosition } from "../components/ClicksByPosition";
 import { BulkAnalysis } from "../components/BulkAnalysis";
-import { type AnalysisRow, clickTier, clicksDescription, clicksValue, hasVolume, volumeLabel } from "../lib/analysis";
+import {
+  API_BASE,
+  type AnalysisRow,
+  clickTier,
+  clicksDescription,
+  clicksValue,
+  hasVolume,
+  readClearedAfterId,
+  volumeLabel,
+  writeClearedAfterId,
+} from "../lib/analysis";
 
 ChartJS.register(
   CategoryScale, 
@@ -50,8 +61,6 @@ ChartJS.register(
   Tooltip, 
   Legend
 );
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export default function HomePage() {
   const [keyword, setKeyword] = useState("");
@@ -96,6 +105,46 @@ export default function HomePage() {
     const t = window.setTimeout(() => setPageReady(true), 400);
     return () => window.clearTimeout(t);
   }, []);
+
+  // Restore recent analyses from the backend (no API calls), and open one if the URL asks: /?open=<analysis id>.
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      try {
+        const openId = Number(new URLSearchParams(window.location.search).get("open")) || null;
+        const res = await fetch(`${API_BASE}/history/latest?limit=20&after_id=${readClearedAfterId()}`);
+        const restored: AnalysisRow[] = res.ok ? await res.json() : [];
+        let opened: AnalysisRow | null = null;
+        if (openId) {
+          const one = await fetch(`${API_BASE}/history/${openId}`);
+          if (one.ok) opened = await one.json();
+          else if (!cancelled) setError("That saved analysis could not be found.");
+        }
+        if (cancelled) return;
+        const sameKeyword = (a: AnalysisRow, b: AnalysisRow) => a.keyword.toLowerCase() === b.keyword.toLowerCase();
+        const incoming = opened ? [opened, ...restored.filter((r) => !sameKeyword(r, opened!))] : restored;
+        // Analyses run while this was loading stay on top.
+        setRows((prev) => [...prev, ...incoming.filter((r) => !prev.some((p) => sameKeyword(p, r)))]);
+        if (opened) {
+          setSelectedKeyword(opened.keyword);
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      } catch {
+        /* backend unreachable: start with an empty dashboard */
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function clearDashboard() {
+    const lastId = Math.max(readClearedAfterId(), ...rows.map((r) => r.analysis_id ?? 0));
+    writeClearedAfterId(lastId);
+    setRows([]);
+    setSelectedKeyword(null);
+  }
 
   async function onAnalyze(e: FormEvent) {
     e.preventDefault();
@@ -275,6 +324,14 @@ export default function HomePage() {
               <ListOrdered size={18} />
               Bulk
             </button>
+            <Link
+              href="/history"
+              className="inline-flex items-center gap-2 h-11 px-4 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600 transition-colors"
+              title="Every saved analysis"
+            >
+              <History size={18} />
+              History
+            </Link>
             <div className="h-4 w-[1px] bg-slate-200" />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100">
               <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
@@ -336,6 +393,12 @@ export default function HomePage() {
                       <Layers size={14} className="text-white/70" />
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Growth Verdict</span>
                     </div>
+                    {selectedRow.analyzed_at && (
+                      <p className="text-xs font-semibold text-white/70">
+                        Analyzed {new Date(selectedRow.analyzed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                        {selectedRow.rescored && " · older analysis, shown with today's click model"}
+                      </p>
+                    )}
                     <div>
                       <h2 className="text-4xl font-black tracking-tight mb-2">
                         {selectedRow.report?.summary.saturation_label ?? "Opportunity Analysis"}
@@ -539,9 +602,23 @@ export default function HomePage() {
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight">Intelligence Logs</h3>
                     <p className="text-sm text-slate-400 font-medium">Historical keyword performance snapshots</p>
                   </div>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 border border-slate-100">
-                     <History size={16} className="text-slate-400" />
-                     <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{rows.length} RECORDED</span>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/history"
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-colors"
+                      title="See every saved analysis"
+                    >
+                      <History size={16} className="text-slate-400" />
+                      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{rows.length} on dashboard</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={clearDashboard}
+                      className="px-4 py-2 rounded-xl border border-slate-100 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-rose-600 hover:border-rose-100 transition-colors"
+                      title="Remove these from the dashboard. They stay in History."
+                    >
+                      Clear
+                    </button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">

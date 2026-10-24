@@ -16,7 +16,7 @@ An SEO tool that estimates how many searchers would actually click an organic re
 *   **Bulk Analysis**: Paste up to 50 keywords (optionally with volumes), see how many API calls the batch needs before running it, and get them ranked by capturable clicks.
 *   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode, chosen in `.env`.
 *   **Cost Guardrails**: Local SQLite cache, remembered volumes, and a daily cap on paid API calls.
-*   **Intelligence Logs**: History of analyzed keywords, stored locally and available at `GET /history`.
+*   **Saved History**: Every analysis is stored locally. The dashboard restores your recent keywords after a refresh, and the History page lets you search and reopen any past analysis without API calls.
 *   **Professional Reporting**: Integrated PDF and CSV export engine for stakeholder presentations.
 
 ## 🚀 Quick Start
@@ -37,7 +37,7 @@ Choose a data source in `.env`:
 
 Serper doesn't provide search volume, so type it into the **Volume** box (for example, from Google Keyword Planner), or set `VOLUME_PROVIDER=dataforseo`. `MAX_API_CALLS_PER_DAY` (default 50) stops a bug from draining your credits.
 
-Results are stored in a local SQLite database at `backend/data/startly.db` (created automatically; not committed). Each keyword is fetched again after `CACHE_TTL_DAYS` (default 7). Volumes you type in are remembered, and past analyses are listed at `GET /history`.
+Results are stored in a local SQLite database at `backend/data/startly.db` (created automatically; not committed). Each keyword is fetched again after `CACHE_TTL_DAYS` (default 7). Volumes you type in are remembered. Past analyses are on the **History** page (`GET /history`, `GET /history/{id}`).
 
 Run the tests (no API calls, no keys needed):
 ```bash

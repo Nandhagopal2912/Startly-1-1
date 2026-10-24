@@ -70,8 +70,9 @@ def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
     volume, volume_source = _resolve_volume(request, payload)
     analysis = analyze_payload(payload, kw, volume_override=volume, volume_source=volume_source)
     provider_name = str(payload.get("provider") or "dataforseo")
-    store.record_analysis(
+    response = {"source": source, "mock_mode": request.mock_mode, "provider": provider_name, **analysis}
+    analysis_id, analyzed_at = store.record_analysis(
         keyword=analysis["keyword"], location=loc, language=lang,
-        snapshot_id=snapshot_id, provider=provider_name, analysis=analysis,
+        snapshot_id=snapshot_id, provider=provider_name, analysis=response,
     )
-    return {"source": source, "mock_mode": request.mock_mode, "provider": provider_name, **analysis}
+    return {**response, "analysis_id": analysis_id, "analyzed_at": analyzed_at}
