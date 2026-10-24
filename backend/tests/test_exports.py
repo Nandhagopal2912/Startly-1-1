@@ -78,20 +78,38 @@ def test_rankings_csv_lists_each_position_and_site():
     assert table[0]["Keyword"] == "big kw"  # ranked like the dashboard
 
 
-def test_pdf_has_summary_and_a_page_per_keyword():
+def page_count(pdf: bytes) -> int:
+    return pdf.count(b"/Type /Page") - pdf.count(b"/Type /Pages")
+
+
+def test_pdf_is_a_full_document_with_contents_and_sections():
     rows = [roth_row(changes={"has_previous": True, "has_changes": True, "previous_fetched_at": "2026-10-21T13:55:23+00:00",
+                              "current_fetched_at": "2026-10-24T06:56:20+00:00", "clicks_before": 2060, "clicks_after": 2305,
                               "summary": ["Top ads disappeared.", "Capturable clicks: 2,060 → 2,305 (+12%)."]}),
             plain_row("big kw", 50000)]
     res = client.post("/report", json={"rows": rows, "format": "pdf"})
     assert res.status_code == 200 and res.content.startswith(b"%PDF")
     assert 'filename="startly-report-' in res.headers["content-disposition"]
-    assert res.content.count(b"/Type /Page") - res.content.count(b"/Type /Pages") >= 3  # summary + 2 keywords
+    # cover, contents, summary, how to read, a page per keyword, method and sources
+    assert page_count(res.content) >= 7
+    # The PDF outline (bookmarks) lists every section and keyword.
+    for title in (b"Summary", b"How to read this report", b"Keyword details", b"what is a roth ira", b"big kw", b"Method and sources"):
+        assert title in res.content, title
 
 
-def test_single_keyword_pdf_skips_the_summary_page():
+def test_single_keyword_pdf_skips_contents_and_summary():
     res = client.post("/report", json={"rows": [roth_row()], "format": "pdf"})
     assert res.status_code == 200
-    assert res.content.count(b"/Type /Page") - res.content.count(b"/Type /Pages") == 1
+    assert page_count(res.content) == 4  # cover, how to read, the keyword, method and sources
+    assert b"Summary" not in res.content
+
+
+def test_pdf_handles_keywords_without_volume_or_organic_results():
+    no_volume = roth_row(volume=None)
+    no_volume["volume_source"] = "unknown"
+    empty = analyze_payload({"keyword": "empty", "keyword_data": {}, "items": [{"type": "ai_overview"}]}, "empty", volume_override=100)
+    res = client.post("/report", json={"rows": [no_volume, {**empty, "provider": "serpapi"}], "format": "pdf"})
+    assert res.status_code == 200 and page_count(res.content) >= 6
 
 
 def test_older_rows_without_new_fields_still_export():

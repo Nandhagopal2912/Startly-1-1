@@ -22,7 +22,7 @@ An SEO tool that estimates how many searchers would actually click an organic re
 *   **Cost Guardrails**: Local SQLite cache, remembered volumes, and a daily cap on paid API calls.
 *   **SERP Change Tracking**: Re-check a keyword to fetch Google's page again and see what changed since the last check: features that appeared or disappeared, sites that moved, and the effect on capturable clicks.
 *   **Saved History**: Every analysis is stored locally. The dashboard restores your recent keywords after a refresh, and the History page lets you search and reopen any past analysis without API calls.
-*   **Exports**: A PDF report (ranked summary, then a page per keyword with its verdict, actions, page-one rankings, changes and sources), a keyword CSV with one row per keyword, and a page-one rankings CSV. Export everything or just the selected keyword. CSVs open cleanly in Excel and are protected against formula injection.
+*   **Exports**: A PDF report written as a document: a cover with headline numbers, contents, a summary with key findings, a ranked table and charts (searches vs capturable clicks, an opportunity map), a guide to the terms, a page per keyword (where 100 searches go, clicks by position with the ranking sites, before/after changes, what to do), and the method and sources. Also a keyword CSV with one row per keyword, and a page-one rankings CSV. Export everything or just the selected keyword. CSVs open cleanly in Excel and are protected against formula injection.
 
 ## 🚀 Quick Start
 

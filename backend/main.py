@@ -21,7 +21,8 @@ from security import SecurityMiddleware
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
 from providers.serpapi import account_info
-from report_export import generate_keywords_csv, generate_pdf, generate_rankings_csv
+from report_export import generate_keywords_csv, generate_rankings_csv
+from report_pdf import generate_pdf
 from stateless import KEY_HEADER, RescoreRequest, analyze_with_own_key, clean_key, rescore
 from usage import calls_today
 
