@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 import store
 from providers import get_serp_provider, get_volume_provider
+from changes import changes_since_previous
 from scoring import analyze_payload
 
 log = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ class AnalyzeRequest(BaseModel):
     mock_mode: bool = False
     # Monthly searches the user already knows (e.g. from Keyword Planner); overrides any API volume.
     search_volume: float | None = Field(default=None, ge=0)
+    # Fetch a fresh results page even if a cached one exists (costs one API call outside mock mode).
+    refresh: bool = False
 
 
 def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
@@ -57,7 +60,7 @@ def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[
 
 def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
     kw, loc, lang = request.keyword, request.location_name, request.language_name
-    found = store.latest_snapshot(kw, loc, lang, request.mock_mode)
+    found = None if request.refresh else store.latest_snapshot(kw, loc, lang, request.mock_mode)
     if found is not None:
         snapshot_id, payload = found
         source = "cache"
@@ -70,7 +73,13 @@ def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
     volume, volume_source = _resolve_volume(request, payload)
     analysis = analyze_payload(payload, kw, volume_override=volume, volume_source=volume_source)
     provider_name = str(payload.get("provider") or "dataforseo")
-    response = {"source": source, "mock_mode": request.mock_mode, "provider": provider_name, **analysis}
+    response = {
+        "source": source,
+        "mock_mode": request.mock_mode,
+        "provider": provider_name,
+        **analysis,
+        "changes": changes_since_previous(snapshot_id, payload, kw, volume, volume_source),
+    }
     analysis_id, analyzed_at = store.record_analysis(
         keyword=analysis["keyword"], location=loc, language=lang,
         snapshot_id=snapshot_id, provider=provider_name, analysis=response,

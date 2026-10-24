@@ -16,6 +16,7 @@ An SEO tool that estimates how many searchers would actually click an organic re
 *   **Bulk Analysis**: Paste up to 50 keywords (optionally with volumes), see how many API calls the batch needs before running it, and get them ranked by capturable clicks.
 *   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode, chosen in `.env`.
 *   **Cost Guardrails**: Local SQLite cache, remembered volumes, and a daily cap on paid API calls.
+*   **SERP Change Tracking**: Re-check a keyword to fetch Google's page again and see what changed since the last check: features that appeared or disappeared, sites that moved, and the effect on capturable clicks.
 *   **Saved History**: Every analysis is stored locally. The dashboard restores your recent keywords after a refresh, and the History page lets you search and reopen any past analysis without API calls.
 *   **Professional Reporting**: Integrated PDF and CSV export engine for stakeholder presentations.
 

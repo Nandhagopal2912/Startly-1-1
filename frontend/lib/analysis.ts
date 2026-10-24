@@ -1,4 +1,4 @@
-import type { FullReport } from "../components/AnalyzeReport";
+import type { FullReport, SerpChanges } from "../components/AnalyzeReport";
 import { formatNumber } from "./utils";
 
 export type AnalysisRow = {
@@ -19,6 +19,7 @@ export type AnalysisRow = {
   analysis_id?: number;
   analyzed_at?: string;
   rescored?: boolean;
+  changes?: SerpChanges;
   report?: FullReport;
 };
 

@@ -39,6 +39,7 @@ import { InsightsPanel, type FullReport } from "../components/AnalyzeReport";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { ClicksByPosition } from "../components/ClicksByPosition";
 import { BulkAnalysis } from "../components/BulkAnalysis";
+import { WhatChanged } from "../components/WhatChanged";
 import {
   API_BASE,
   type AnalysisRow,
@@ -72,6 +73,67 @@ export default function HomePage() {
   const [rows, setRows] = useState<AnalysisRow[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [rechecking, setRechecking] = useState(false);
+  const [usage, setUsage] = useState<{ serp_provider: string; calls_today: number; daily_cap: number } | null>(null);
+
+  async function refreshUsage() {
+    try {
+      const res = await fetch(`${API_BASE}/health/provider`);
+      if (res.ok) setUsage(await res.json());
+    } catch {
+      /* usage note is optional */
+    }
+  }
+
+  useEffect(() => {
+    refreshUsage();
+  }, []);
+
+  function recheckCostNote(row: AnalysisRow) {
+    if (row.mock_mode) return "Mock mode: re-checking is free.";
+    if (!usage) return "Re-checking uses 1 API call.";
+    const left = Math.max(usage.daily_cap - usage.calls_today, 0);
+    return `Re-checking uses 1 ${usage.serp_provider} search (${left} of ${usage.daily_cap} left today).`;
+  }
+
+  // Fetch the results page again (skipping the cache) and compare it with the previous check.
+  async function recheck(row: AnalysisRow) {
+    if (!row.mock_mode && !window.confirm(`Re-check "${row.keyword}" now?
+
+${recheckCostNote(row)}`)) return;
+    setError("");
+    setRechecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: row.keyword,
+          location_name: "United States",
+          language_name: "English",
+          mock_mode: row.mock_mode,
+          refresh: true,
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let detail = `Re-check failed (${res.status})`;
+        try {
+          const data = JSON.parse(text);
+          if (data.detail) detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+        } catch { /* keep generic message */ }
+        throw new Error(detail);
+      }
+      const fresh = JSON.parse(text) as AnalysisRow;
+      setRows((prev) => prev.map((r) => (r.keyword === row.keyword ? fresh : r)));
+      setSelectedKeyword(fresh.keyword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-check failed");
+    } finally {
+      setRechecking(false);
+      refreshUsage();
+    }
+  }
 
   // Bulk results go into the same list as single analyses, so the history table, charts and exports include them.
   function addBulkResults(newRows: AnalysisRow[]) {
@@ -183,6 +245,7 @@ export default function HomePage() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+      refreshUsage();
     }
   }
 
@@ -473,6 +536,13 @@ export default function HomePage() {
                       </div>
                     )}
                   </div>
+
+                  <WhatChanged
+                    changes={selectedRow.changes}
+                    rechecking={rechecking}
+                    costNote={recheckCostNote(selectedRow)}
+                    onRecheck={() => recheck(selectedRow)}
+                  />
 
                   {/* Competitive Landscape */}
                   {rows.length > 1 && (

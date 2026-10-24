@@ -147,3 +147,22 @@ def snapshot_by_id(snapshot_id: int) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute("SELECT payload FROM serp_snapshots WHERE id = ?", (snapshot_id,)).fetchone()
     return json.loads(row["payload"]) if row else None
+
+
+def snapshot_and_previous(snapshot_id: int) -> tuple[str, tuple[int, dict[str, Any], str] | None] | None:
+    """(fetched_at of this snapshot, (id, payload, fetched_at) of the one before it for the same query, or None)."""
+    with connect() as conn:
+        cur = conn.execute(
+            "SELECT keyword, location, language, mock_mode, fetched_at FROM serp_snapshots WHERE id = ?",
+            (snapshot_id,),
+        ).fetchone()
+        if cur is None:
+            return None
+        prev = conn.execute(
+            "SELECT id, payload, fetched_at FROM serp_snapshots "
+            "WHERE keyword = ? AND location = ? AND language = ? AND mock_mode = ? AND id < ? "
+            "ORDER BY id DESC LIMIT 1",
+            (cur["keyword"], cur["location"], cur["language"], cur["mock_mode"], snapshot_id),
+        ).fetchone()
+    previous = (int(prev["id"]), json.loads(prev["payload"]), prev["fetched_at"]) if prev else None
+    return cur["fetched_at"], previous

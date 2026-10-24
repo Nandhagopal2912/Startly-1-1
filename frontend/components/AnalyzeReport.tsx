@@ -64,6 +64,28 @@ export type ClickModel = {
   baseline_source: { name: string; url: string };
 };
 
+export type SerpChanges = {
+  has_previous: boolean;
+  current_fetched_at?: string | null;
+  previous_fetched_at?: string;
+  has_changes?: boolean;
+  summary?: string[];
+  features_added?: { type: string; label: string }[];
+  features_removed?: { type: string; label: string }[];
+  feature_counts_changed?: { type: string; label: string; before: number; after: number }[];
+  organic_before?: number;
+  organic_after?: number;
+  domains_entered?: { domain: string; position: number }[];
+  domains_left?: { domain: string; position: number }[];
+  domains_moved?: { domain: string; before: number; after: number }[];
+  clicks_before?: number | null;
+  clicks_after?: number | null;
+  ctr_before?: number;
+  ctr_after?: number;
+  click_loss_before?: number;
+  click_loss_after?: number;
+};
+
 export type FullReport = {
   summary: ReportSummary;
   sections: ReportSection[];
