@@ -49,6 +49,9 @@ A local SQLite database at `backend/data/startly.db`:
 
 `migrate_cache.py` imports the pre-SQLite JSON cache once on startup. `init_db()` adds new columns to older databases.
 
+### Own-key requests (`backend/stateless.py`)
+Requests that carry an `X-SerpApi-Key` header are stateless: the search runs on the visitor's key, nothing is written to the database, and the server's daily cap doesn't apply. The response includes the normalized results page (`snapshot`), which the browser keeps (`frontend/lib/ownKey.ts`) and sends back to `POST /rescore` (re-score after a volume edit) or as `previous` on a re-check (compare with the last check). Incoming snapshots are size- and shape-limited.
+
 ### 3. Click model (`backend/ctr_model.py`, `backend/ctr_config.py`)
 It turns the organic result count and the SERP features into click-through rates per position. It starts from a published baseline curve, applies sourced per-position multipliers for features that take clicks, and returns a low–high range: effects stacked vs strongest effect only. The full method and sources are in [METHODOLOGY.md](METHODOLOGY.md).
 

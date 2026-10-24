@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, ListOrdered, Loader2, X } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
-import { type AnalysisRow, clickTier, clicksValue, hasVolume, volumeLabel } from "../lib/analysis";
+import { type AnalysisRow, clickTier, clicksValue, hasVolume, postJson, volumeLabel } from "../lib/analysis";
+import { KEY_HEADER, type LocalAnalysis, latestLocal, previousCheck, previousLocal, updateLocal } from "../lib/ownKey";
 
 const MAX_KEYWORDS = 50;
 
@@ -15,13 +16,14 @@ type Preview = {
   new_calls: number;
   without_volume: number;
   duplicates_removed: number;
-  calls_today: number;
-  daily_cap: number;
-  remaining_calls: number;
+  calls_today?: number;
+  daily_cap?: number;
+  remaining_calls?: number;
   fits_in_cap: boolean;
+  own_key?: boolean;
   demo?: boolean;
   unavailable?: number;
-  items: { keyword: string; cached: boolean; has_volume: boolean }[];
+  items?: { keyword: string; cached: boolean; has_volume: boolean }[];
 };
 
 type BulkResult = {
@@ -39,6 +41,7 @@ type BulkResponse = {
   errors: number;
   cap_reached: boolean;
   api_calls_used: number;
+  own_key_searches?: number;
 };
 
 // One keyword per line, optionally followed by a volume: "best crm, 5,000" or "best crm<TAB>5000".
@@ -59,35 +62,45 @@ export function parseKeywordList(text: string): ParsedKeyword[] {
   return out;
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try {
-      const data = JSON.parse(text);
-      if (data.detail) detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
-    } catch { /* keep generic message */ }
-    throw new Error(detail);
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+// Same order as the backend: known clicks (most first), then unknown volume by organic CTR, then errors.
+function rankResults(results: BulkResult[]): BulkResult[] {
+  const key = (r: BulkResult): [number, number] => {
+    if (r.status !== "ok" || !r.analysis) return [2, 0];
+    if (r.analysis.capturable_clicks != null && hasVolume(r.analysis)) return [0, -r.analysis.capturable_clicks];
+    return [1, -(r.analysis.report?.summary.organic_ctr_total ?? 0)];
+  };
+  const sorted = [...results].sort((a, b) => key(a)[0] - key(b)[0] || key(a)[1] - key(b)[1]);
+  let rank = 0;
+  return sorted.map((r) => ({ ...r, rank: r.status === "ok" ? ++rank : null }));
+}
+
+// Later lines' volumes win, like the backend's de-duplication.
+function dedupe(list: ParsedKeyword[]): { items: ParsedKeyword[]; duplicates: number } {
+  const byKey = new Map<string, ParsedKeyword>();
+  for (const item of list) {
+    const k = item.keyword.toLowerCase();
+    const prev = byKey.get(k);
+    byKey.set(k, prev ? { keyword: prev.keyword, search_volume: item.search_volume ?? prev.search_volume } : item);
   }
-  return JSON.parse(text) as T;
+  return { items: [...byKey.values()], duplicates: list.length - byKey.size };
 }
 
 export function BulkAnalysis({
-  apiBase,
   mockMode,
   location,
+  ownKey = null,
   onClose,
   onResults,
   onOpenKeyword,
 }: {
-  apiBase: string;
   mockMode: boolean;
   location: string;
+  // Public demo with the visitor's own SerpApi key: searches run on that key and results stay in the browser.
+  ownKey?: string | null;
   onClose: () => void;
   onResults: (rows: AnalysisRow[]) => void;
   onOpenKeyword: (keyword: string) => void;
@@ -105,9 +118,25 @@ export function BulkAnalysis({
 
   async function onPreview() {
     setError("");
+    if (ownKey) {
+      // The browser knows what it already has; only the rest needs searches on the visitor's key.
+      const { items, duplicates } = dedupe(parsed);
+      const saved = items.filter((i) => latestLocal(i.keyword, location));
+      setPreview({
+        own_key: true,
+        total: items.length,
+        cached: saved.length,
+        new_calls: items.length - saved.length,
+        without_volume: items.filter((i) => i.search_volume == null && !latestLocal(i.keyword, location)?.raw_volume).length,
+        duplicates_removed: duplicates,
+        fits_in_cap: true,
+      });
+      setStep("preview");
+      return;
+    }
     setBusy(true);
     try {
-      setPreview(await postJson<Preview>(`${apiBase}/bulk/preview`, body));
+      setPreview(await postJson<Preview>("/bulk/preview", body));
       setStep("preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -116,11 +145,51 @@ export function BulkAnalysis({
     }
   }
 
+  async function runWithOwnKey(key: string): Promise<BulkResponse> {
+    const { items } = dedupe(parsed);
+    const saved: BulkResult[] = [];
+    const toSearch: ParsedKeyword[] = [];
+    for (const item of items) {
+      const local = latestLocal(item.keyword, location);
+      if (!local) {
+        toSearch.push(item);
+      } else if (item.search_volume != null && item.search_volume !== local.raw_volume && local.snapshot && local.snapshot_fetched_at) {
+        // New volume for a page the browser already has: re-score it for free.
+        const rescored = await postJson<AnalysisRow>("/rescore", {
+          keyword: local.keyword,
+          location_name: location,
+          search_volume: item.search_volume,
+          snapshot: local.snapshot,
+          snapshot_fetched_at: local.snapshot_fetched_at,
+          previous: previousCheck(previousLocal(local)),
+        });
+        const entry: LocalAnalysis = { ...rescored, local_id: local.local_id };
+        updateLocal(entry);
+        saved.push({ keyword: item.keyword, status: "ok", rank: null, analysis: entry });
+      } else {
+        saved.push({ keyword: item.keyword, status: "ok", rank: null, analysis: local });
+      }
+    }
+    const searched = toSearch.length
+      ? await postJson<BulkResponse>("/bulk/analyze", { ...body, keywords: toSearch }, { [KEY_HEADER]: key })
+      : { results: [], analyzed: 0, errors: 0, cap_reached: false, api_calls_used: 0, own_key_searches: 0 };
+    const results = rankResults([...saved, ...searched.results]);
+    const errors = results.filter((r) => r.status !== "ok").length;
+    return {
+      results,
+      analyzed: results.length - errors,
+      errors,
+      cap_reached: false,
+      api_calls_used: 0,
+      own_key_searches: searched.own_key_searches ?? 0,
+    };
+  }
+
   async function onRun() {
     setError("");
     setStep("running");
     try {
-      const data = await postJson<BulkResponse>(`${apiBase}/bulk/analyze`, body);
+      const data = ownKey ? await runWithOwnKey(ownKey) : await postJson<BulkResponse>("/bulk/analyze", body);
       setResponse(data);
       onResults(data.results.flatMap((r) => (r.status === "ok" && r.analysis ? [r.analysis] : [])));
       setStep("results");
@@ -186,9 +255,13 @@ export function BulkAnalysis({
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Stat label="Keywords" value={preview.total} note={preview.duplicates_removed ? `${preview.duplicates_removed} duplicate${preview.duplicates_removed === 1 ? "" : "s"} removed` : undefined} />
-                <Stat label="Cached (free)" value={preview.cached} />
-                <Stat label="New API calls" value={preview.new_calls} tone={preview.fits_in_cap ? "neutral" : "danger"} />
-                <Stat label="Left today" value={preview.remaining_calls} note={`${preview.calls_today}/${preview.daily_cap} used`} />
+                <Stat label={preview.own_key ? "Saved in your browser (free)" : "Cached (free)"} value={preview.cached} />
+                <Stat label={preview.own_key ? "Searches on your key" : "New API calls"} value={preview.new_calls} tone={preview.fits_in_cap ? "neutral" : "danger"} />
+                {preview.own_key ? (
+                  <Stat label="Stored on the server" value={0} note="results stay in this browser" />
+                ) : (
+                  <Stat label="Left today" value={preview.remaining_calls ?? 0} note={`${preview.calls_today}/${preview.daily_cap} used`} />
+                )}
               </div>
               {!preview.fits_in_cap && (
                 <p className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
@@ -210,7 +283,11 @@ export function BulkAnalysis({
                   <ArrowLeft size={16} /> Edit list
                 </button>
                 <button onClick={onRun} className="px-6 py-3 rounded-2xl premium-gradient text-white text-sm font-bold shadow-md">
-                  {preview.new_calls ? `Run (${preview.new_calls} API call${preview.new_calls === 1 ? "" : "s"})` : "Run (free)"}
+                  {!preview.new_calls
+                    ? "Run (free)"
+                    : preview.own_key
+                      ? `Run (${plural(preview.new_calls, "search", "searches")} on your key)`
+                      : `Run (${plural(preview.new_calls, "API call", "API calls")})`}
                 </button>
               </div>
             </div>
@@ -228,7 +305,12 @@ export function BulkAnalysis({
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-600">
                 <span className="inline-flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={16} /> {response.analyzed} analyzed</span>
-                <span>· {response.api_calls_used} API call{response.api_calls_used === 1 ? "" : "s"} used</span>
+                <span>
+                  ·{" "}
+                  {ownKey
+                    ? `${plural(response.own_key_searches ?? 0, "search", "searches")} on your key`
+                    : `${plural(response.api_calls_used, "API call", "API calls")} used`}
+                </span>
                 {response.errors > 0 && <span className="text-rose-600">· {response.errors} failed{response.cap_reached ? " (daily cap reached)" : ""}</span>}
                 <span className="text-slate-400">· Added to the dashboard; export them from there.</span>
               </div>

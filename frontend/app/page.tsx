@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, History, ListOrdered, Loader2, Search, XCircle, Zap } from "lucide-react";
+import { AlertCircle, History, KeyRound, ListOrdered, Loader2, Search, XCircle, Zap } from "lucide-react";
 import { cn } from "../lib/utils";
 import { BulkAnalysis } from "../components/BulkAnalysis";
 import { DetailsPanel } from "../components/DetailsPanel";
+import { KeyDialog, type KeyInfo } from "../components/KeyDialog";
 import { KeywordList } from "../components/KeywordList";
 import { PageOne } from "../components/PageOne";
 import { Recommendations } from "../components/Recommendations";
@@ -26,6 +27,24 @@ import {
   rowCountry,
   writeClearedAfterId,
 } from "../lib/analysis";
+import {
+  KEY_HEADER,
+  type LocalAnalysis,
+  addLocal,
+  dashboardLocal,
+  deleteAllLocal,
+  forgetKey,
+  getLocal,
+  hideAllLocal,
+  hideLocal,
+  latestLocal,
+  listLocal,
+  previousCheck,
+  previousLocal,
+  readKey,
+  saveKey,
+  updateLocal,
+} from "../lib/ownKey";
 
 type Usage = { serp_provider: string; serp_configured: boolean; calls_today: number; daily_cap: number; demo_mode?: boolean };
 
@@ -50,6 +69,25 @@ export default function HomePage() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [demoKeywords, setDemoKeywords] = useState<string[]>([]);
   const demo = Boolean(usage?.demo_mode);
+  // Visitor's own SerpApi key (public demo): kept in their browser, sent only with their searches.
+  const [ownKey, setOwnKey] = useState<string | null>(null);
+  const [keyInfo, setKeyInfo] = useState<KeyInfo | null>(null);
+  const [keyDialog, setKeyDialog] = useState<{ reason?: string } | null>(null);
+  const [localCount, setLocalCount] = useState(0);
+  const keyHeaders = ownKey ? { [KEY_HEADER]: ownKey } : undefined;
+  const restoredOnce = useRef(false);
+
+  function countSearchOnOwnKey() {
+    // Each search on the visitor's key uses one of their credits; keep the shown count roughly current.
+    setKeyInfo((info) => (info && info.searches_left != null ? { ...info, searches_left: Math.max(info.searches_left - 1, 0) } : info));
+  }
+
+  function saveLocalRow(row: AnalysisRow, replace?: LocalAnalysis): LocalAnalysis {
+    const entry = replace ? { ...row, local_id: replace.local_id } : addLocal(row);
+    if (replace) updateLocal(entry);
+    setLocalCount(listLocal().length);
+    return entry;
+  }
 
   const selectedRow = useMemo(
     () => rows.find((r) => r.keyword === selectedKeyword) ?? rows[0] ?? null,
@@ -64,6 +102,14 @@ export default function HomePage() {
       setUsage(null);
     }
   }
+
+  // Show how many searches the visitor's key has left (SerpApi's account check is free).
+  useEffect(() => {
+    if (!demo || !ownKey) return;
+    postJson<KeyInfo>("/key/check", {}, { [KEY_HEADER]: ownKey })
+      .then(setKeyInfo)
+      .catch(() => setKeyInfo(null));
+  }, [demo, ownKey]);
 
   useEffect(() => {
     if (!demo) return;
@@ -87,11 +133,24 @@ export default function HomePage() {
 
   // Restore recent analyses (no API calls) and open one if the URL asks: /?open=<analysis id>.
   useEffect(() => {
-    let cancelled = false;
+    // Run once. React's dev mode runs effects twice, and the URL is cleaned up after the first run.
+    if (restoredOnce.current) return;
+    restoredOnce.current = true;
     refreshUsage();
+    setOwnKey(readKey());
+    setLocalCount(listLocal().length);
     async function restore() {
+      const params = new URLSearchParams(window.location.search);
+      const local = dashboardLocal();
+      const openedLocal = params.get("local") ? getLocal(params.get("local")!) : undefined;
+      if (local.length || openedLocal) {
+        const first = openedLocal ?? local[0];
+        setRows([first, ...local.filter((r) => r.local_id !== first.local_id && !sameKeyword(r, first))]);
+        setSelectedKeyword(first.keyword);
+        if (openedLocal) window.history.replaceState(null, "", window.location.pathname);
+      }
       try {
-        const openId = Number(new URLSearchParams(window.location.search).get("open")) || null;
+        const openId = Number(params.get("open")) || null;
         const res = await fetch(`${API_BASE}/history/latest?limit=30&after_id=${readClearedAfterId()}`);
         const hidden = readHidden();
         const restored: AnalysisRow[] = res.ok ? (await res.json()).filter((r: AnalysisRow) => !isHidden(r, hidden)) : [];
@@ -99,9 +158,8 @@ export default function HomePage() {
         if (openId) {
           const one = await fetch(`${API_BASE}/history/${openId}`);
           if (one.ok) opened = await one.json();
-          else if (!cancelled) setError("That saved analysis could not be found.");
+          else setError("That saved analysis could not be found.");
         }
-        if (cancelled) return;
         const incoming = opened ? [opened, ...restored.filter((r) => !sameKeyword(r, opened!))] : restored;
         setRows((prev) => [...prev, ...incoming.filter((r) => !prev.some((p) => sameKeyword(p, r)))]);
         if (opened) {
@@ -109,15 +167,12 @@ export default function HomePage() {
           window.history.replaceState(null, "", window.location.pathname);
         }
       } catch {
-        if (!cancelled) setError("Can't reach the backend on port 8000. Start it with: uvicorn main:app --port 8000");
+        setError("Can't reach the backend on port 8000. Start it with: uvicorn main:app --port 8000");
       } finally {
-        if (!cancelled) setRestoring(false);
+        setRestoring(false);
       }
     }
     restore();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   async function onAnalyze(e: FormEvent) {
@@ -128,6 +183,20 @@ export default function HomePage() {
   async function analyzeKeyword(text: string) {
     if (!text.trim()) return;
     setError("");
+    const typedVolume = volume.trim() === "" ? null : Number(volume.replace(/[,\s]/g, ""));
+    if (demo) {
+      const saved = latestLocal(text, country);
+      if (saved && typedVolume === null) {
+        // Already analyzed in this browser: reopen it for free.
+        upsertRow(saved);
+        setKeyword("");
+        return;
+      }
+      if (ownKey && !demoKeywords.some((k) => k.toLowerCase() === text.trim().toLowerCase())) {
+        await analyzeWithOwnKey(text.trim(), typedVolume ?? (saved?.volume_source === "user" ? saved.raw_volume : null), saved);
+        return;
+      }
+    }
     setLoading(true);
     try {
       const fresh = await postJson<AnalysisRow>("/analyze", {
@@ -141,10 +210,36 @@ export default function HomePage() {
       setKeyword("");
       setVolume("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
+      const message = err instanceof Error ? err.message : "Analysis failed";
+      if (demo && message.includes("isn't in the demo")) {
+        setKeyDialog({ reason: `"${text.trim()}" isn't one of the samples. Add your own free SerpApi key to analyze it.` });
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
       refreshUsage();
+    }
+  }
+
+  // Search on the visitor's own key; the result (and its results page) is saved in their browser.
+  async function analyzeWithOwnKey(text: string, searchVolume: number | null, previous?: AnalysisRow) {
+    if (!ownKey) return;
+    setLoading(true);
+    try {
+      const fresh = await postJson<AnalysisRow>(
+        "/analyze",
+        { keyword: text, location_name: country, language_name: "English", search_volume: searchVolume, previous: previousCheck(previous) },
+        keyHeaders
+      );
+      countSearchOnOwnKey();
+      upsertRow(saveLocalRow(fresh));
+      setKeyword("");
+      setVolume("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -153,6 +248,20 @@ export default function HomePage() {
     setError("");
     setSavingVolume(true);
     try {
+      if (row.own_key && row.snapshot && row.snapshot_fetched_at) {
+        const local = row.local_id ? getLocal(row.local_id) : undefined;
+        const rescored = await postJson<AnalysisRow>("/rescore", {
+          keyword: row.keyword,
+          location_name: rowCountry(row),
+          language_name: row.language_name ?? "English",
+          search_volume: newVolume,
+          snapshot: row.snapshot,
+          snapshot_fetched_at: row.snapshot_fetched_at,
+          previous: local ? previousCheck(previousLocal(local)) : undefined,
+        });
+        upsertRow(local ? saveLocalRow(rescored, local) : rescored);
+        return;
+      }
       upsertRow(
         await postJson<AnalysisRow>("/analyze", {
           keyword: row.keyword,
@@ -171,7 +280,11 @@ export default function HomePage() {
   }
 
   function recheckCostNote(row: AnalysisRow) {
-    if (demo) return "Re-checking is turned off in the public demo.";
+    if (demo && ownKey) {
+      const left = keyInfo?.searches_left;
+      return `Re-checking uses 1 search on your SerpApi key${left != null ? ` (${left} left)` : ""}.`;
+    }
+    if (demo) return "Add your own SerpApi key to re-check keywords.";
     if (row.mock_mode) return "Mock mode: re-checking is free.";
     if (!usage) return "Re-checking uses 1 API call.";
     const left = Math.max(usage.daily_cap - usage.calls_today, 0);
@@ -181,6 +294,30 @@ export default function HomePage() {
   // Fetch the results page again (skipping the cache) and compare it with the previous check.
   async function recheck(row: AnalysisRow) {
     if (!row.mock_mode && !window.confirm(`Re-check "${row.keyword}" now?\n\n${recheckCostNote(row)}`)) return;
+    if (demo && ownKey) {
+      setRechecking(true);
+      setError("");
+      try {
+        const fresh = await postJson<AnalysisRow>(
+          "/analyze",
+          {
+            keyword: row.keyword,
+            location_name: rowCountry(row),
+            language_name: row.language_name ?? "English",
+            search_volume: row.volume_source && row.volume_source !== "unknown" ? row.raw_volume : null,
+            previous: previousCheck(row),
+          },
+          keyHeaders
+        );
+        countSearchOnOwnKey();
+        upsertRow(saveLocalRow(fresh));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Re-check failed");
+      } finally {
+        setRechecking(false);
+      }
+      return;
+    }
     setError("");
     setRechecking(true);
     try {
@@ -203,6 +340,7 @@ export default function HomePage() {
 
   function removeRow(kw: string) {
     const row = rows.find((r) => r.keyword === kw);
+    if (row?.local_id) hideLocal(row.keyword);
     if (row?.analysis_id) hideKeyword(row.keyword, row.analysis_id);
     setRows((prev) => prev.filter((r) => r.keyword !== kw));
     if (selectedKeyword === kw) setSelectedKeyword(null);
@@ -211,13 +349,18 @@ export default function HomePage() {
   function clearDashboard() {
     if (!window.confirm("Remove all keywords from the dashboard? They stay in History.")) return;
     writeClearedAfterId(Math.max(readClearedAfterId(), ...rows.map((r) => r.analysis_id ?? 0)));
+    hideAllLocal();
     setRows([]);
     setSelectedKeyword(null);
   }
 
   // Bulk results join the dashboard list, so the keyword list and exports include them.
-  function addBulkResults(newRows: AnalysisRow[]) {
-    if (!newRows.length) return;
+  function addBulkResults(results: AnalysisRow[]) {
+    if (!results.length) return;
+    // New searches on the visitor's key are saved in their browser; rows already saved there come back as-is.
+    const newRows = results.map((r) => (r.own_key && !r.local_id ? saveLocalRow(r) : r));
+    const searches = results.filter((r) => r.own_key && !r.local_id).length;
+    if (searches) setKeyInfo((info) => (info && info.searches_left != null ? { ...info, searches_left: Math.max(info.searches_left - searches, 0) } : info));
     setRows((prev) => [...newRows, ...prev.filter((r) => !newRows.some((n) => sameKeyword(n, r)))]);
     setSelectedKeyword(newRows[0].keyword);
   }
@@ -264,15 +407,41 @@ export default function HomePage() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {bulkOpen && (
         <BulkAnalysis
-          apiBase={API_BASE}
           mockMode={mockMode}
           location={country}
+          ownKey={demo ? ownKey : null}
           onClose={() => setBulkOpen(false)}
           onResults={addBulkResults}
           onOpenKeyword={(kw) => {
             setSelectedKeyword(kw);
             setBulkOpen(false);
             window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+      )}
+
+      {keyDialog && (
+        <KeyDialog
+          reason={keyDialog.reason}
+          localCount={localCount}
+          onClose={() => setKeyDialog(null)}
+          onSave={(key, remember, info) => {
+            saveKey(key, remember);
+            setOwnKey(key);
+            setKeyInfo(info);
+            setKeyDialog(null);
+          }}
+          onForget={() => {
+            forgetKey();
+            setOwnKey(null);
+            setKeyInfo(null);
+            setKeyDialog(null);
+          }}
+          onDeleteData={() => {
+            deleteAllLocal();
+            setLocalCount(0);
+            setRows((prev) => prev.filter((r) => !r.local_id));
+            setKeyDialog(null);
           }}
         />
       )}
@@ -295,7 +464,7 @@ export default function HomePage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder={demo ? "Pick a sample keyword" : "Keyword to analyze, e.g. best crm software"}
+                placeholder={demo && !ownKey ? "Pick a sample keyword, or use your own key for any keyword" : "Keyword to analyze, e.g. best crm software"}
                 list={demo ? "demo-keywords" : undefined}
                 aria-label="Keyword to analyze"
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -338,6 +507,19 @@ export default function HomePage() {
           </form>
 
           <nav className="ml-auto flex items-center gap-2 xl:ml-0">
+            {demo && (
+              <button
+                type="button"
+                onClick={() => setKeyDialog({})}
+                className={cn(
+                  "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium",
+                  ownKey ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                )}
+                title={ownKey ? "Your SerpApi key is set" : "Analyze any keyword with your own free SerpApi key"}
+              >
+                <KeyRound size={16} /> {ownKey ? "Your key" : "Use your key"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setBulkOpen(true)}
@@ -358,13 +540,23 @@ export default function HomePage() {
         <div className="border-t border-slate-100 bg-slate-50/80">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-1.5 text-xs text-slate-500 sm:px-6">
             {demo ? (
-              <span className="font-semibold text-indigo-700">
-                Public demo: sample data, read-only.{" "}
-                <a href={README_URL} target="_blank" rel="noreferrer" className="underline">
-                  Run Startly yourself
-                </a>{" "}
-                to analyze any keyword.
-              </span>
+              ownKey ? (
+                <span className="font-semibold text-emerald-700">
+                  Using your SerpApi key{keyInfo?.searches_left != null ? `: ${keyInfo.searches_left} searches left` : ""}. Your analyses are saved
+                  in this browser only.
+                </span>
+              ) : (
+                <span className="font-semibold text-indigo-700">
+                  Public demo: explore the samples for free, or{" "}
+                  <button type="button" onClick={() => setKeyDialog({})} className="underline">
+                    add your own free SerpApi key
+                  </button>{" "}
+                  to analyze any keyword.{" "}
+                  <a href={README_URL} target="_blank" rel="noreferrer" className="font-normal underline">
+                    Or run Startly yourself
+                  </a>
+                </span>
+              )
             ) : (
             <label className="inline-flex cursor-pointer items-center gap-2">
               <input type="checkbox" checked={mockMode} onChange={(e) => setMockMode(e.target.checked)} className="h-3.5 w-3.5 accent-amber-500" />
@@ -428,7 +620,7 @@ export default function HomePage() {
             </aside>
 
             <div className="min-w-0 space-y-6">
-              <VerdictHero row={selectedRow} demo={demo} savingVolume={savingVolume} onSaveVolume={(v) => saveVolume(selectedRow, v)} />
+              <VerdictHero row={selectedRow} demo={demo && !selectedRow.own_key} savingVolume={savingVolume} onSaveVolume={(v) => saveVolume(selectedRow, v)} />
               <div className="grid gap-6 xl:grid-cols-5">
                 <div className="xl:col-span-2">
                   <Recommendations items={selectedRow.report?.recommendations} />
@@ -441,7 +633,7 @@ export default function HomePage() {
                 changes={selectedRow.changes}
                 rechecking={rechecking}
                 costNote={recheckCostNote(selectedRow)}
-                onRecheck={demo ? undefined : () => recheck(selectedRow)}
+                onRecheck={demo && !ownKey ? undefined : () => recheck(selectedRow)}
               />
               <DetailsPanel row={selectedRow} />
             </div>

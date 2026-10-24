@@ -74,7 +74,13 @@ Startly is built to run on your own machine. Before putting it online, run the b
 | `RATE_LIMIT_PER_MINUTE` | e.g. `60` | Per-IP request limit (`429` with `Retry-After` when exceeded). |
 | `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`. |
 
-Fill the demo database first by analyzing your sample keywords locally (with your key), then deploy that `backend/data/startly.db` with `DEMO_MODE=true`. In demo mode the dashboard shows a "Public demo" notice, suggests the sample keywords, and hides re-checks and mock data.
+Fill the demo database first by analyzing your sample keywords locally (with your key), then deploy that `backend/data/startly.db` with `DEMO_MODE=true`. Use a fresh database with only the samples you want to show. Mock analyses also appear in History.
+
+**Visitors can use their own key.** In the demo, anyone can explore the samples for free, or add their own free [SerpApi](https://serpapi.com) key to analyze any keyword:
+- The key stays in their browser and is sent only with their own searches, in an `X-SerpApi-Key` header. The server uses it for that request and never stores or logs it.
+- Their results are saved **in their browser** (with the results page), so reopening, editing volume (`POST /rescore`) and comparing re-checks need no further searches, and nobody else can see them.
+- `POST /key/check` validates a key and shows searches left, using SerpApi's free account endpoint.
+- These searches use the visitor's quota, not yours, and don't count toward `MAX_API_CALLS_PER_DAY`.
 
 Never deploy with `DEMO_MODE=false` and your own API key: anyone could use your credits.
 

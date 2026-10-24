@@ -70,6 +70,11 @@ export function KeywordList({
                 <span className="min-w-0 flex-1">
                   <span className={cn("block truncate text-sm", selected ? "font-semibold text-indigo-900" : "font-medium text-slate-800")}>
                     {row.keyword}
+                    {row.own_key && (
+                      <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-emerald-700" title="Analyzed with your key, saved in this browser">
+                        yours
+                      </span>
+                    )}
                   </span>
                   <span className="block text-xs text-slate-400">
                     {hasVolume(row) && row.capturable_clicks != null

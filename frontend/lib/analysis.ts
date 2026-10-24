@@ -22,6 +22,12 @@ export type AnalysisRow = {
   changes?: SerpChanges;
   location_name?: string;
   language_name?: string;
+  demo?: boolean;
+  // Analyses made with the visitor's own SerpApi key (kept in their browser, see lib/ownKey.ts).
+  own_key?: boolean;
+  snapshot?: { keyword: string; provider: string; items: { type: string; rank_group: number | null; domain: string | null }[] };
+  snapshot_fetched_at?: string;
+  local_id?: string;
   report?: FullReport;
 };
 
@@ -94,10 +100,10 @@ export function sortRows(rows: AnalysisRow[], key: SortKey): AnalysisRow[] {
 }
 
 // POST JSON and return the parsed body, turning FastAPI's {"detail": ...} errors into readable messages.
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
   const text = await res.text();

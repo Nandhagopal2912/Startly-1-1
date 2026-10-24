@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, History, Loader2, Search, Zap } from "lucide-react";
 import { cn, formatNumber } from "../../lib/utils";
 import { API_BASE, tierForLoss, volumeLabel } from "../../lib/analysis";
+import { type LocalAnalysis, listLocal } from "../../lib/ownKey";
 
 const PAGE_SIZE = 50;
 
@@ -37,6 +38,12 @@ function formatWhen(iso: string) {
 export default function HistoryPage() {
   const router = useRouter();
   const [items, setItems] = useState<HistoryItem[]>([]);
+  // Analyses made with the visitor's own key, stored only in this browser.
+  const [local, setLocal] = useState<LocalAnalysis[]>([]);
+
+  useEffect(() => {
+    setLocal(listLocal().reverse());
+  }, []);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
@@ -124,6 +131,16 @@ export default function HistoryPage() {
             </div>
           )}
 
+          {local.length > 0 && (
+            <LocalSection
+              items={local.filter((a) => !query.trim() || a.keyword.toLowerCase().includes(query.trim().toLowerCase()))}
+              onOpen={(id) => router.push(`/?local=${encodeURIComponent(id)}`)}
+            />
+          )}
+
+          {local.length > 0 && (
+            <h2 className="border-t border-slate-100 px-6 pb-1 pt-5 text-sm font-semibold text-slate-900">Sample analyses</h2>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
@@ -208,5 +225,40 @@ export default function HistoryPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+function LocalSection({ items, onOpen }: { items: LocalAnalysis[]; onOpen: (id: string) => void }) {
+  return (
+    <section className="px-6 py-5">
+      <h2 className="text-sm font-semibold text-slate-900">Your analyses</h2>
+      <p className="text-xs text-slate-500">Made with your own key and saved in this browser only. Reopening them is free.</p>
+      {items.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">None match this search.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-100">
+          {items.map((a) => {
+            const tier = tierForLoss(a.report?.summary.penalty_percent ?? 0);
+            const known = a.volume_source !== "unknown";
+            return (
+              <li key={a.local_id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(a.local_id)}
+                  className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-indigo-50/40"
+                >
+                  <span className="w-40 shrink-0 text-xs text-slate-500">{a.analyzed_at ? formatWhen(a.analyzed_at) : ""}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-900">{a.keyword}</span>
+                  <span className="tabular-nums text-slate-600">
+                    {known && a.capturable_clicks != null ? `${formatNumber(a.capturable_clicks)} clicks` : "no volume"}
+                  </span>
+                  <span className={cn("rounded-full px-3 py-0.5 text-xs font-medium", tier.className)}>{tier.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
