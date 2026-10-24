@@ -74,7 +74,7 @@ Startly is built to run on your own machine. Before putting it online, run the b
 | `RATE_LIMIT_PER_MINUTE` | e.g. `60` | Per-IP request limit (`429` with `Retry-After` when exceeded). |
 | `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`. |
 
-Fill the demo database first by analyzing your sample keywords locally (with your key), then deploy that `backend/data/startly.db` with `DEMO_MODE=true`. Use a fresh database with only the samples you want to show. Mock analyses also appear in History.
+The sample keywords ship with the code in `backend/demo_data/seed.json`. When a `DEMO_MODE=true` server starts with an empty database, it loads them automatically, so a fresh deployment needs no database file. To change the samples, analyze the keywords locally with your key (real results only; mock analyses are skipped), then run `python demo_seed.py export` in `backend/` and commit the updated seed.
 
 **Visitors can use their own key.** In the demo, anyone can explore the samples for free, or add their own free [SerpApi](https://serpapi.com) key to analyze any keyword:
 - The key stays in their browser and is sent only with their own searches, in an `X-SerpApi-Key` header. The server uses it for that request and never stores or logs it.

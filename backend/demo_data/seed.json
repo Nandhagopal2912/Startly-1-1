@@ -1,0 +1,221 @@
+{
+ "snapshots": [
+  {
+   "keyword": "what is a roth ira",
+   "location": "united states",
+   "language": "english",
+   "provider": "serpapi",
+   "payload": {
+    "keyword": "what is a roth ira",
+    "provider": "serpapi",
+    "keyword_data": {},
+    "items": [
+     {
+      "type": "ai_overview",
+      "rank_group": 0,
+      "domain": null
+     },
+     {
+      "type": "people_also_ask",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "video",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "organic",
+      "rank_group": 1,
+      "domain": "citi.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 2,
+      "domain": "experian.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 3,
+      "domain": "forbes.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 4,
+      "domain": "robinhood.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 5,
+      "domain": "rainapp.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 6,
+      "domain": "capitalone.com"
+     },
+     {
+      "type": "paid",
+      "rank_group": 1,
+      "domain": "investopedia.com"
+     },
+     {
+      "type": "paid",
+      "rank_group": 2,
+      "domain": "firstrade.com"
+     },
+     {
+      "type": "paid",
+      "rank_group": 3,
+      "domain": "tradestation.com"
+     },
+     {
+      "type": "paid",
+      "rank_group": 4,
+      "domain": "careervillage.org"
+     }
+    ]
+   },
+   "fetched_at": "2026-10-21T13:55:23+00:00"
+  },
+  {
+   "keyword": "devops",
+   "location": "united states",
+   "language": "english",
+   "provider": "serpapi",
+   "payload": {
+    "keyword": "devops",
+    "provider": "serpapi",
+    "keyword_data": {},
+    "items": [
+     {
+      "type": "ai_overview",
+      "rank_group": 0,
+      "domain": null
+     },
+     {
+      "type": "people_also_ask",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "images",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "video",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "organic",
+      "rank_group": 1,
+      "domain": "intel.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 2,
+      "domain": "netapp.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 3,
+      "domain": "reddit.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 4,
+      "domain": "comptia.org"
+     },
+     {
+      "type": "organic",
+      "rank_group": 5,
+      "domain": "bunnyshell.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 6,
+      "domain": "sonarsource.com"
+     },
+     {
+      "type": "paid",
+      "rank_group": 1,
+      "domain": "dynatrace.com"
+     }
+    ]
+   },
+   "fetched_at": "2026-10-21T14:14:34+00:00"
+  },
+  {
+   "keyword": "what is a roth ira",
+   "location": "united states",
+   "language": "english",
+   "provider": "serpapi",
+   "payload": {
+    "keyword": "what is a roth ira",
+    "provider": "serpapi",
+    "keyword_data": {},
+    "items": [
+     {
+      "type": "ai_overview",
+      "rank_group": 0,
+      "domain": null
+     },
+     {
+      "type": "people_also_ask",
+      "rank_group": null,
+      "domain": null
+     },
+     {
+      "type": "organic",
+      "rank_group": 1,
+      "domain": "fidelity.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 2,
+      "domain": "tiaa.org"
+     },
+     {
+      "type": "organic",
+      "rank_group": 3,
+      "domain": "irs.gov"
+     },
+     {
+      "type": "organic",
+      "rank_group": 4,
+      "domain": "investor.vanguard.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 5,
+      "domain": "prudential.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 6,
+      "domain": "retirepathva.com"
+     },
+     {
+      "type": "organic",
+      "rank_group": 7,
+      "domain": "schwab.com"
+     }
+    ]
+   },
+   "fetched_at": "2026-10-24T06:56:20+00:00"
+  }
+ ],
+ "volumes": [
+  {
+   "keyword": "what is a roth ira",
+   "location": "united states",
+   "language": "english",
+   "search_volume": 10000.0,
+   "source": "user",
+   "fetched_at": "2026-10-21T14:06:18+00:00"
+  }
+ ]
+}

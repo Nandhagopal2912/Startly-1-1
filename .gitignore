@@ -7,6 +7,7 @@ backend/cache/
 # Node
 node_modules/
 .next/
+*.tsbuildinfo
 
 # Env
 .env

@@ -15,6 +15,7 @@ from credits import server_credits
 from analysis import AnalyzeRequest, run_analysis
 from bulk import BulkRequest, bulk_analyze, bulk_preview, dedupe_keywords
 from db import init_db
+from demo_seed import load_seed_if_empty
 from history import get_full_analysis, latest_full_analyses
 from migrate_cache import import_json_cache
 from ratelimit import RateLimitMiddleware
@@ -32,10 +33,12 @@ from usage import calls_today
 async def lifespan(_: FastAPI):
     init_db()
     import_json_cache()
+    if config.demo_mode():
+        load_seed_if_empty()
     yield
 
 
-app = FastAPI(title="Traffic Opportunity API", version="1.4.0", lifespan=lifespan)
+app = FastAPI(title="Startly API", version="1.4.0", lifespan=lifespan)
 # Starlette runs the last-added middleware first, so CORS wraps the rate limiter and 429s stay readable.
 app.add_middleware(SecurityMiddleware)
 app.add_middleware(RateLimitMiddleware)
