@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, History, KeyRound, ListOrdered, Loader2, Search, XCircle, Zap } from "lucide-react";
 import { cn } from "../lib/utils";
 import { BulkAnalysis } from "../components/BulkAnalysis";
+import { CreditsStatus } from "../components/CreditsStatus";
 import { DetailsPanel } from "../components/DetailsPanel";
 import { KeyDialog, type KeyInfo } from "../components/KeyDialog";
 import { type ExportFormat, type ExportScope, KeywordList } from "../components/KeywordList";
@@ -71,6 +72,7 @@ export default function HomePage() {
   const [rechecking, setRechecking] = useState(false);
   const [savingVolume, setSavingVolume] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [creditsTick, setCreditsTick] = useState(0);
   const [demoKeywords, setDemoKeywords] = useState<string[]>([]);
   const demo = Boolean(usage?.demo_mode);
   // Visitor's own SerpApi key (public demo): kept in their browser, sent only with their searches.
@@ -100,6 +102,7 @@ export default function HomePage() {
   );
 
   async function refreshUsage() {
+    setCreditsTick((n) => n + 1);
     try {
       const res = await fetch(`${API_BASE}/health/provider`);
       if (res.ok) setUsage(await res.json());
@@ -425,7 +428,6 @@ export default function HomePage() {
     }
   }
 
-  const callsLeft = usage ? Math.max(usage.daily_cap - usage.calls_today, 0) : null;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -589,14 +591,7 @@ export default function HomePage() {
               </span>
             </label>
             )}
-            {demo ? null : usage ? (
-              <span title="Paid searches made today against MAX_API_CALLS_PER_DAY">
-                <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", usage.serp_configured ? "bg-emerald-500" : "bg-rose-500")} />
-                {usage.serp_configured ? `${usage.serp_provider}: ${callsLeft} of ${usage.daily_cap} searches left today` : `${usage.serp_provider} key missing in backend/.env`}
-              </span>
-            ) : (
-              <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-rose-500" />Backend offline</span>
-            )}
+            {!demo && <CreditsStatus refreshSignal={creditsTick} />}
           </div>
         </div>
       </header>

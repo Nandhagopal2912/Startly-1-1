@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 import config
 import store
+from credits import server_credits
 from analysis import AnalyzeRequest, run_analysis
 from bulk import BulkRequest, bulk_analyze, bulk_preview, dedupe_keywords
 from db import init_db
@@ -101,6 +102,12 @@ def health_provider() -> dict[str, Any]:
         "daily_cap": config.daily_api_cap(),
         "demo_mode": config.demo_mode(),
     }
+
+
+@app.get("/credits")
+def credits(refresh: bool = Query(False, description="Ask the providers again instead of using the 1-minute cache")) -> dict[str, Any]:
+    """Credits left on the server's SerpApi and Serper keys (never the keys). Empty in DEMO_MODE."""
+    return server_credits(refresh)
 
 
 @app.get("/demo/keywords")

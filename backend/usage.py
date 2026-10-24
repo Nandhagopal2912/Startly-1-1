@@ -41,3 +41,11 @@ def record_call(provider: str, endpoint: str, keyword: str) -> None:
             "INSERT INTO api_calls (provider, endpoint, keyword, called_at) VALUES (?, ?, ?, ?)",
             (provider, endpoint, keyword, utc_now()),
         )
+
+
+def calls_by_provider_today() -> dict[str, int]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT provider, COUNT(*) AS n FROM api_calls WHERE called_at >= ? GROUP BY provider", (_start_of_today(),)
+        ).fetchall()
+    return {r["provider"]: int(r["n"]) for r in rows}

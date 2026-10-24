@@ -22,7 +22,7 @@ def isolated_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
-    for name in ("SERPER_API_KEY", "SERPAPI_API_KEY","DATAFORSEO_EMAIL", "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"):
+    for name in ("SERPER_API_KEY", "SERPAPI_API_KEY", "DATAFORSEO_EMAIL", "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SERP_PROVIDER", "serper")
     monkeypatch.setenv("VOLUME_PROVIDER", "none")
@@ -30,7 +30,9 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "0")  # tests that check rate limiting turn it back on
     monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.delenv("TRUST_PROXY_HEADERS", raising=False)
+    import credits
     import ratelimit
 
     ratelimit.reset()
+    credits.clear_cache()
     yield tmp_path

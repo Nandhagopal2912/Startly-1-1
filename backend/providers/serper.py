@@ -115,3 +115,18 @@ class SerperProvider:
         except ValueError as exc:
             raise HTTPException(status_code=502, detail="Serper returned invalid JSON.") from exc
         return normalize(data, keyword)
+
+
+ACCOUNT_URL = "https://google.serper.dev/account"
+
+
+def account_balance(api_key: str) -> dict[str, Any]:
+    """Credits left on a Serper key. Not in Serper's docs (found by testing), so callers treat it as best-effort."""
+    try:
+        res = requests.get(ACCOUNT_URL, headers={"X-API-KEY": api_key}, timeout=15)
+        data = res.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Couldn't read the Serper balance: {type(exc).__name__}") from exc
+    if not res.ok or "balance" not in data:
+        raise HTTPException(status_code=502, detail="Serper didn't return a balance. Check it at serper.dev/dashboard.")
+    return {"credits_left": data.get("balance"), "rate_limit_per_second": data.get("rateLimit")}
