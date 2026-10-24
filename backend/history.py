@@ -37,6 +37,14 @@ def get_full_analysis(analysis_id: int) -> dict[str, Any] | None:
     result = json.loads(row["result"]) if row.get("result") else _rescore_legacy(row)
     if result is None:
         return None
+    report = result.get("report") or {}
+    if "verdict" not in report:
+        # Saved before verdicts existed: add the newer report fields from the snapshot, keep the saved numbers.
+        rebuilt = _rescore_legacy(row)
+        if rebuilt is not None:
+            for key in ("verdict", "recommendations", "page_one"):
+                report.setdefault(key, rebuilt["report"][key])
+            result["report"] = report
     return {**result, "analysis_id": row["id"], "analyzed_at": row["created_at"]}
 
 

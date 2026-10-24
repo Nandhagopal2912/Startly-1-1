@@ -96,3 +96,19 @@ def test_legacy_analysis_without_snapshot_is_skipped():
     assert client.get(f"/history/{original['analysis_id']}").status_code == 404
     assert store.latest_analysis_ids() == [original["analysis_id"]]
     assert client.get("/history/latest").json() == []
+
+
+def test_older_results_get_verdict_and_page_one_when_reopened():
+    import json as _json
+
+    original = analyze("older format", 4000)
+    with connect() as conn:
+        stored = _json.loads(conn.execute("SELECT result FROM analyses WHERE id = ?", (original["analysis_id"],)).fetchone()[0])
+        for key in ("verdict", "recommendations", "page_one"):
+            stored["report"].pop(key)
+        conn.execute("UPDATE analyses SET result = ? WHERE id = ?", (_json.dumps(stored), original["analysis_id"]))
+
+    reopened = client.get(f"/history/{original['analysis_id']}").json()
+    assert reopened["report"]["verdict"] == original["report"]["verdict"]
+    assert reopened["report"]["page_one"] == original["report"]["page_one"]
+    assert reopened["capturable_clicks"] == original["capturable_clicks"]

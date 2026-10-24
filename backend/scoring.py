@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from ctr_config import BASELINE_CTR
 from ctr_model import estimate_clicks
+from insights import page_one, recommendations, verdict
 
 # Features that answer the query on the page itself, so the report warns about zero-click risk.
 ZERO_CLICK_FEATURES = {"ai_overview", "local_pack"}
@@ -245,6 +246,12 @@ def analyze_payload(
         model=model,
     )
     summary = report["summary"]
+    report["verdict"] = verdict(model, has_volume, summary["penalty_percent"])
+    report["recommendations"] = recommendations(
+        model=model, types=set(non_organic_types), has_volume=has_volume,
+        loss_pct=summary["penalty_percent"], verdict_tone=report["verdict"]["tone"],
+    )
+    report["page_one"] = page_one(items, model["positions"])
 
     return {
         "keyword": keyword,
