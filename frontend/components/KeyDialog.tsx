@@ -8,7 +8,6 @@ import { KEY_HEADER, SERPAPI_SIGNUP_URL, keyIsRemembered, keyTransportIsSecure, 
 export type KeyInfo = { plan_name: string | null; searches_per_month: number | null; searches_left: number | null };
 
 export function KeyDialog({
-  demo = true,
   reason,
   localCount,
   onSave,
@@ -16,7 +15,6 @@ export function KeyDialog({
   onDeleteData,
   onClose,
 }: {
-  demo?: boolean;
   reason?: string;
   localCount: number;
   onSave: (key: string, remember: boolean, info: KeyInfo) => void;
@@ -62,13 +60,6 @@ export function KeyDialog({
 
         <form onSubmit={submit} className="space-y-4 px-6 py-5">
           {reason && <p className="rounded-2xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900">{reason}</p>}
-          {!demo && (
-            <p className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
-              <b>Normal mode:</b> new analyses use the server&apos;s key from backend/.env, not this one. A key saved here is used
-              only when this app runs as the public demo. You can still check it, change it, or forget it here.
-              {existing ? " One is saved in this browser right now." : " No key is saved in this browser."}
-            </p>
-          )}
           {!secure && (
             <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
               This page or its API isn&apos;t using HTTPS, so a key typed here could be read in transit. Keys are disabled until the site is

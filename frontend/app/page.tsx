@@ -457,7 +457,6 @@ export default function HomePage() {
 
       {keyDialog && (
         <KeyDialog
-          demo={demo}
           reason={keyDialog.reason}
           localCount={localCount}
           onClose={() => setKeyDialog(null)}
@@ -543,27 +542,19 @@ export default function HomePage() {
           </form>
 
           <nav className="ml-auto flex items-center gap-2 xl:ml-0">
-            {/* Shown in both modes so a key saved in this browser can always be checked or forgotten.
-                Normal mode searches with the server's .env key; a saved key is only used on the public demo. */}
-            <button
-              type="button"
-              onClick={() => setKeyDialog({})}
-              className={cn(
-                "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium",
-                ownKey
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : demo
-                    ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
-              )}
-              title={
-                demo
-                  ? ownKey ? "Your SerpApi key is set" : "Analyze any keyword with your own free SerpApi key"
-                  : ownKey ? "A SerpApi key is saved in this browser (used only on the public demo)" : "Save or manage your own SerpApi key"
-              }
-            >
-              <KeyRound size={16} /> {ownKey ? "Your key" : demo ? "Use your key" : "Key"}
-            </button>
+            {demo && (
+              <button
+                type="button"
+                onClick={() => setKeyDialog({})}
+                className={cn(
+                  "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium",
+                  ownKey ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                )}
+                title={ownKey ? "Your SerpApi key is set" : "Analyze any keyword with your own free SerpApi key"}
+              >
+                <KeyRound size={16} /> {ownKey ? "Your key" : "Use your key"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setBulkOpen(true)}
