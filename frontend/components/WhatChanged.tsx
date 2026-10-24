@@ -19,7 +19,7 @@ export function WhatChanged({
   changes?: SerpChanges;
   rechecking: boolean;
   costNote: string;
-  onRecheck: () => void;
+  onRecheck?: () => void; // omitted when re-checking isn't allowed (public demo)
 }) {
   const hasPrevious = changes?.has_previous;
   const clicksMoved =
@@ -40,6 +40,7 @@ export function WhatChanged({
                 : "Re-check to fetch the page again and compare"}
           </p>
         </div>
+        {onRecheck && (
         <button
           type="button"
           onClick={onRecheck}
@@ -50,11 +51,13 @@ export function WhatChanged({
           {rechecking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
           {rechecking ? "Re-checking…" : "Re-check now"}
         </button>
+        )}
       </div>
 
       {!hasPrevious && (
         <p className="text-sm font-medium text-slate-500">
-          This is the first saved check of this keyword. Re-check later to see how Google&apos;s page changes. {costNote}
+          This is the first saved check of this keyword.{" "}
+          {onRecheck ? <>Re-check later to see how Google&apos;s page changes. {costNote}</> : costNote}
         </p>
       )}
 

@@ -6,7 +6,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import config
 import store
@@ -15,6 +15,7 @@ from bulk import BulkRequest, bulk_analyze, bulk_preview
 from db import init_db
 from history import get_full_analysis, latest_full_analyses
 from migrate_cache import import_json_cache
+from ratelimit import RateLimitMiddleware
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
 from report_export import generate_csv_detailed, generate_pdf_detailed
@@ -28,14 +29,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Traffic Opportunity API", version="1.3.0", lifespan=lifespan)
+app = FastAPI(title="Traffic Opportunity API", version="1.4.0", lifespan=lifespan)
+# Starlette runs the last-added middleware first, so CORS wraps the rate limiter and 429s stay readable.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=config.allowed_origins(),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+MAX_REPORT_ROWS = 200
 
 
 class DetailedReportRow(BaseModel):
@@ -55,7 +59,7 @@ class DetailedReportRow(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    rows: list[DetailedReportRow]
+    rows: list[DetailedReportRow] = Field(..., max_length=MAX_REPORT_ROWS)
     format: Literal["csv", "pdf"] = "csv"
 
 
@@ -76,7 +80,16 @@ def health_provider() -> dict[str, Any]:
         "volume_configured": bool(volume and volume.is_configured()),
         "calls_today": calls_today(),
         "daily_cap": config.daily_api_cap(),
+        "demo_mode": config.demo_mode(),
     }
+
+
+@app.get("/demo/keywords")
+def demo_keywords() -> list[dict[str, Any]]:
+    """Keywords the public demo can show (only available when DEMO_MODE is on)."""
+    if not config.demo_mode():
+        raise HTTPException(status_code=404, detail="Not found")
+    return store.saved_keywords()
 
 
 @app.get("/health/dataforseo")

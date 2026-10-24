@@ -47,3 +47,29 @@ def daily_api_cap() -> int:
 
 def cache_ttl_days() -> int:
     return env_int("CACHE_TTL_DAYS", 7)
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    raw = env_clean(name)
+    return default if raw is None else raw.lower() in {"1", "true", "yes", "on"}
+
+
+def demo_mode() -> bool:
+    """Public demo: serve saved analyses only. No provider calls, no writes to the database."""
+    return env_bool("DEMO_MODE")
+
+
+def allowed_origins() -> list[str]:
+    """Browser origins allowed to call the API (comma-separated ALLOWED_ORIGINS)."""
+    raw = env_clean("ALLOWED_ORIGINS") or "http://localhost:3000,http://127.0.0.1:3000"
+    return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+
+
+def rate_limit_per_minute() -> int:
+    """Requests per client IP per minute (0 = no limit)."""
+    return env_int("RATE_LIMIT_PER_MINUTE", 120)
+
+
+def trust_proxy_headers() -> bool:
+    """Read the client IP from X-Forwarded-For; only enable behind a proxy that sets it (most hosts do)."""
+    return env_bool("TRUST_PROXY_HEADERS")

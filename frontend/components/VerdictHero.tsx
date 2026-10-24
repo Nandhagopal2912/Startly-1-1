@@ -14,10 +14,12 @@ const TONES = {
 
 export function VerdictHero({
   row,
+  demo = false,
   savingVolume,
   onSaveVolume,
 }: {
   row: AnalysisRow;
+  demo?: boolean;
   savingVolume: boolean;
   onSaveVolume: (volume: number) => Promise<void>;
 }) {
@@ -74,7 +76,7 @@ export function VerdictHero({
           </dd>
           <dd className="text-xs text-slate-500">vs a page with only organic links</dd>
         </div>
-        <VolumeField row={row} saving={savingVolume} onSave={onSaveVolume} />
+        <VolumeField row={row} demo={demo} saving={savingVolume} onSave={onSaveVolume} />
       </dl>
     </section>
   );
@@ -90,7 +92,7 @@ function Stat({ label, value, suffix }: { label: string; value: number | null | 
   );
 }
 
-function VolumeField({ row, saving, onSave }: { row: AnalysisRow; saving: boolean; onSave: (v: number) => Promise<void> }) {
+function VolumeField({ row, demo, saving, onSave }: { row: AnalysisRow; demo: boolean; saving: boolean; onSave: (v: number) => Promise<void> }) {
   const known = hasVolume(row);
   const [editing, setEditing] = useState(!known);
   const [value, setValue] = useState(known ? String(row.raw_volume) : "");
@@ -140,7 +142,7 @@ function VolumeField({ row, saving, onSave }: { row: AnalysisRow; saving: boolea
           </button>
         </dd>
       )}
-      <dd className="text-xs text-slate-500">{known ? volumeLabel(row.volume_source) : "Free to add: no API call"}</dd>
+      <dd className="text-xs text-slate-500">{demo ? "Try any number (not saved in the demo)" : known ? volumeLabel(row.volume_source) : "Free to add: no API call"}</dd>
     </div>
   );
 }

@@ -7,7 +7,7 @@ from typing import Any
 import requests
 from fastapi import HTTPException
 
-from config import BACKEND_DIR, env_clean
+from config import env_clean
 from providers.base import snapshot
 from usage import record_call
 
@@ -31,7 +31,7 @@ def _require_credentials() -> tuple[str, str]:
             status_code=503,
             detail=(
                 "DataForSEO is not configured. Set DATAFORSEO_EMAIL and DATAFORSEO_PASSWORD "
-                f"in {BACKEND_DIR / '.env'} and restart the server, or switch SERP_PROVIDER."
+                "in backend/.env and restart the server, or switch SERP_PROVIDER."
             ),
         )
     return creds

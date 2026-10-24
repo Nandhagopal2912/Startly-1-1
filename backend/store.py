@@ -168,3 +168,15 @@ def snapshot_and_previous(snapshot_id: int) -> tuple[str, tuple[int, dict[str, A
         ).fetchone()
     previous = (int(prev["id"]), json.loads(prev["payload"]), prev["fetched_at"]) if prev else None
     return cur["fetched_at"], previous
+
+
+def saved_keywords(limit: int = 200) -> list[dict[str, Any]]:
+    """Keywords with a saved non-mock results page, as the user typed them in their latest analysis."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT s.keyword AS key, s.location, MAX(s.fetched_at) AS last_at, "
+            "(SELECT a.keyword FROM analyses a WHERE lower(a.keyword) = s.keyword ORDER BY a.id DESC LIMIT 1) AS label "
+            "FROM serp_snapshots s WHERE s.mock_mode = 0 GROUP BY s.keyword, s.location ORDER BY last_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"keyword": r["label"] or r["key"], "location": r["location"].title(), "fetched_at": r["last_at"]} for r in rows]

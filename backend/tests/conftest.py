@@ -27,4 +27,10 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("SERP_PROVIDER", "serper")
     monkeypatch.setenv("VOLUME_PROVIDER", "none")
     monkeypatch.setenv("MAX_API_CALLS_PER_DAY", "50")
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "0")  # tests that check rate limiting turn it back on
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    monkeypatch.delenv("TRUST_PROXY_HEADERS", raising=False)
+    import ratelimit
+
+    ratelimit.reset()
     yield tmp_path

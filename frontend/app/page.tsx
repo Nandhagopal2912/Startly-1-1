@@ -27,7 +27,9 @@ import {
   writeClearedAfterId,
 } from "../lib/analysis";
 
-type Usage = { serp_provider: string; serp_configured: boolean; calls_today: number; daily_cap: number };
+type Usage = { serp_provider: string; serp_configured: boolean; calls_today: number; daily_cap: number; demo_mode?: boolean };
+
+const README_URL = "https://github.com/Nandhagopal2912/Startly-1-1#readme";
 
 const sameKeyword = (a: AnalysisRow, b: AnalysisRow) => a.keyword.toLowerCase() === b.keyword.toLowerCase();
 
@@ -46,6 +48,8 @@ export default function HomePage() {
   const [rechecking, setRechecking] = useState(false);
   const [savingVolume, setSavingVolume] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [demoKeywords, setDemoKeywords] = useState<string[]>([]);
+  const demo = Boolean(usage?.demo_mode);
 
   const selectedRow = useMemo(
     () => rows.find((r) => r.keyword === selectedKeyword) ?? rows[0] ?? null,
@@ -60,6 +64,14 @@ export default function HomePage() {
       setUsage(null);
     }
   }
+
+  useEffect(() => {
+    if (!demo) return;
+    fetch(`${API_BASE}/demo/keywords`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { keyword: string }[]) => setDemoKeywords(list.map((k) => k.keyword)))
+      .catch(() => setDemoKeywords([]));
+  }, [demo]);
 
   // Put a fresh analysis on the dashboard, replacing any older one of the same keyword.
   function upsertRow(fresh: AnalysisRow) {
@@ -110,15 +122,19 @@ export default function HomePage() {
 
   async function onAnalyze(e: FormEvent) {
     e.preventDefault();
-    if (!keyword.trim()) return;
+    await analyzeKeyword(keyword);
+  }
+
+  async function analyzeKeyword(text: string) {
+    if (!text.trim()) return;
     setError("");
     setLoading(true);
     try {
       const fresh = await postJson<AnalysisRow>("/analyze", {
-        keyword: keyword.trim(),
+        keyword: text.trim(),
         location_name: country,
         language_name: "English",
-        mock_mode: mockMode,
+        mock_mode: mockMode && !demo,
         search_volume: volume.trim() === "" ? null : Number(volume.replace(/[,\s]/g, "")),
       });
       upsertRow(fresh);
@@ -155,6 +171,7 @@ export default function HomePage() {
   }
 
   function recheckCostNote(row: AnalysisRow) {
+    if (demo) return "Re-checking is turned off in the public demo.";
     if (row.mock_mode) return "Mock mode: re-checking is free.";
     if (!usage) return "Re-checking uses 1 API call.";
     const left = Math.max(usage.daily_cap - usage.calls_today, 0);
@@ -278,11 +295,19 @@ export default function HomePage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="Keyword to analyze, e.g. best crm software"
+                placeholder={demo ? "Pick a sample keyword" : "Keyword to analyze, e.g. best crm software"}
+                list={demo ? "demo-keywords" : undefined}
                 aria-label="Keyword to analyze"
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
+            {demo && (
+              <datalist id="demo-keywords">
+                {demoKeywords.map((k) => (
+                  <option key={k} value={k} />
+                ))}
+              </datalist>
+            )}
             <input
               inputMode="numeric"
               value={volume}
@@ -332,13 +357,23 @@ export default function HomePage() {
 
         <div className="border-t border-slate-100 bg-slate-50/80">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-1.5 text-xs text-slate-500 sm:px-6">
+            {demo ? (
+              <span className="font-semibold text-indigo-700">
+                Public demo: sample data, read-only.{" "}
+                <a href={README_URL} target="_blank" rel="noreferrer" className="underline">
+                  Run Startly yourself
+                </a>{" "}
+                to analyze any keyword.
+              </span>
+            ) : (
             <label className="inline-flex cursor-pointer items-center gap-2">
               <input type="checkbox" checked={mockMode} onChange={(e) => setMockMode(e.target.checked)} className="h-3.5 w-3.5 accent-amber-500" />
               <span className={mockMode ? "font-semibold text-amber-700" : ""}>
                 Mock data {mockMode ? "on: free, fake results" : "(free, for testing)"}
               </span>
             </label>
-            {usage ? (
+            )}
+            {demo ? null : usage ? (
               <span title="Paid searches made today against MAX_API_CALLS_PER_DAY">
                 <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", usage.serp_configured ? "bg-emerald-500" : "bg-rose-500")} />
                 {usage.serp_configured ? `${usage.serp_provider}: ${callsLeft} of ${usage.daily_cap} searches left today` : `${usage.serp_provider} key missing in backend/.env`}
@@ -375,7 +410,7 @@ export default function HomePage() {
               <Loader2 size={28} className="animate-spin" />
             </div>
           ) : (
-            <EmptyState onBulk={() => setBulkOpen(true)} />
+            <EmptyState onBulk={() => setBulkOpen(true)} samples={demo ? demoKeywords : []} onSample={analyzeKeyword} />
           )
         ) : (
           <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
@@ -393,7 +428,7 @@ export default function HomePage() {
             </aside>
 
             <div className="min-w-0 space-y-6">
-              <VerdictHero row={selectedRow} savingVolume={savingVolume} onSaveVolume={(v) => saveVolume(selectedRow, v)} />
+              <VerdictHero row={selectedRow} demo={demo} savingVolume={savingVolume} onSaveVolume={(v) => saveVolume(selectedRow, v)} />
               <div className="grid gap-6 xl:grid-cols-5">
                 <div className="xl:col-span-2">
                   <Recommendations items={selectedRow.report?.recommendations} />
@@ -406,7 +441,7 @@ export default function HomePage() {
                 changes={selectedRow.changes}
                 rechecking={rechecking}
                 costNote={recheckCostNote(selectedRow)}
-                onRecheck={() => recheck(selectedRow)}
+                onRecheck={demo ? undefined : () => recheck(selectedRow)}
               />
               <DetailsPanel row={selectedRow} />
             </div>
@@ -425,7 +460,7 @@ export default function HomePage() {
   );
 }
 
-function EmptyState({ onBulk }: { onBulk: () => void }) {
+function EmptyState({ onBulk, samples, onSample }: { onBulk: () => void; samples: string[]; onSample: (kw: string) => void }) {
   const steps = [
     ["Enter a keyword", "Startly fetches Google's first page for it (cached keywords are free)."],
     ["Add its monthly volume", "From Google Keyword Planner, now or after analyzing."],
@@ -446,6 +481,23 @@ function EmptyState({ onBulk }: { onBulk: () => void }) {
           </li>
         ))}
       </ol>
+      {samples.length > 0 && (
+        <div className="mt-8">
+          <p className="text-sm font-semibold text-slate-700">Try a sample keyword</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {samples.slice(0, 12).map((kw) => (
+              <button
+                key={kw}
+                type="button"
+                onClick={() => onSample(kw)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
+              >
+                {kw}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <p className="mt-8 text-sm text-slate-500">
         Have a list?{" "}
         <button type="button" onClick={onBulk} className="font-semibold text-indigo-600 hover:underline">

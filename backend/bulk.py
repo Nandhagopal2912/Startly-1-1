@@ -54,13 +54,16 @@ def _dedupe(request: BulkRequest) -> tuple[list[BulkKeyword], int]:
 def bulk_preview(request: BulkRequest) -> dict[str, Any]:
     items, duplicates = _dedupe(request)
     loc, lang = request.location_name, request.language_name
+    demo = config.demo_mode()
     rows = []
     for item in items:
-        cached = store.latest_snapshot(item.keyword, loc, lang, request.mock_mode) is not None
+        # The demo serves every saved page regardless of age; anything else counts as a paid call.
+        cached = store.latest_snapshot(item.keyword, loc, lang, request.mock_mode, fresh_only=not demo) is not None
         has_volume = item.search_volume is not None or store.get_volume(item.keyword, loc, lang) is not None
-        rows.append({"keyword": item.keyword, "cached": cached or request.mock_mode, "has_volume": has_volume})
+        rows.append({"keyword": item.keyword, "cached": cached or (request.mock_mode and not demo), "has_volume": has_volume})
 
-    new_calls = sum(1 for r in rows if not r["cached"])
+    uncached = sum(1 for r in rows if not r["cached"])
+    new_calls = 0 if demo else uncached
     used, cap = calls_today(), config.daily_api_cap()
     remaining = max(cap - used, 0)
     return {
@@ -74,6 +77,8 @@ def bulk_preview(request: BulkRequest) -> dict[str, Any]:
         "daily_cap": cap,
         "remaining_calls": remaining,
         "fits_in_cap": new_calls <= remaining,
+        "demo": demo,
+        "unavailable": uncached if demo else 0,  # demo only: keywords with no saved page
     }
 
 

@@ -8,18 +8,19 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
+import config
 import store
-from providers import get_serp_provider, get_volume_provider
 from changes import changes_since_previous
+from providers import get_serp_provider, get_volume_provider
 from scoring import analyze_payload
 
 log = logging.getLogger(__name__)
 
 
 class AnalyzeRequest(BaseModel):
-    keyword: str = Field(..., min_length=1)
-    location_name: str = "United States"
-    language_name: str = "English"
+    keyword: str = Field(..., min_length=1, max_length=200)
+    location_name: str = Field("United States", max_length=100)
+    language_name: str = Field("English", max_length=50)
     mock_mode: bool = False
     # Monthly searches the user already knows (e.g. from Keyword Planner); overrides any API volume.
     search_volume: float | None = Field(default=None, ge=0)
@@ -60,7 +61,40 @@ def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[
     return volume, volume_provider.name
 
 
+def _run_demo(request: AnalyzeRequest) -> dict[str, Any]:
+    """Public demo: score a saved results page without calling providers or writing to the database."""
+    kw, loc, lang = request.keyword, request.location_name, request.language_name
+    if request.refresh or request.mock_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="The demo is read-only: re-checks and mock analyses are turned off. Run Startly yourself to analyze new keywords.",
+        )
+    found = store.latest_snapshot(kw, loc, lang, False, fresh_only=False)
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"\"{kw.strip()}\" isn't in the demo. Try one of the sample keywords.")
+    snapshot_id, payload = found
+    if request.search_volume is not None:
+        volume, volume_source = request.search_volume, "user"  # applied to this response only, never saved
+    else:
+        volume, volume_source = store.get_volume(kw, loc, lang) or (None, "")
+    analysis = analyze_payload(payload, kw, volume_override=volume, volume_source=volume_source or "user")
+    return {
+        "source": "cache",
+        "mock_mode": False,
+        "provider": str(payload.get("provider") or "dataforseo"),
+        "location_name": loc,
+        "language_name": lang,
+        **analysis,
+        "changes": changes_since_previous(snapshot_id, payload, kw, volume, volume_source),
+        "analysis_id": None,
+        "analyzed_at": None,
+        "demo": True,
+    }
+
+
 def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
+    if config.demo_mode():
+        return _run_demo(request)
     kw, loc, lang = request.keyword, request.location_name, request.language_name
     found = None if request.refresh else store.latest_snapshot(
         kw, loc, lang, request.mock_mode, fresh_only=not request.cache_only

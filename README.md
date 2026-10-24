@@ -63,6 +63,21 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000).
 
+## 🌐 Running a Public Demo
+
+Startly is built to run on your own machine. Before putting it online, run the backend in **demo mode**, so visitors can't spend your API credits or change your data:
+
+| Setting (`backend/.env`) | Value for a public demo | What it does |
+| :--- | :--- | :--- |
+| `DEMO_MODE` | `true` | Serves only saved analyses; no provider calls, no database writes. Unknown keywords, re-checks and mock analyses are refused. Volume edits apply to that response only. |
+| `ALLOWED_ORIGINS` | your frontend URL | Only your site's pages can call the API. |
+| `RATE_LIMIT_PER_MINUTE` | e.g. `60` | Per-IP request limit (`429` with `Retry-After` when exceeded). |
+| `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`. |
+
+Fill the demo database first by analyzing your sample keywords locally (with your key), then deploy that `backend/data/startly.db` with `DEMO_MODE=true`. In demo mode the dashboard shows a "Public demo" notice, suggests the sample keywords, and hides re-checks and mock data.
+
+Never deploy with `DEMO_MODE=false` and your own API key: anyone could use your credits.
+
 ## 🧠 Methodology
 
 Startly shows how many people would actually click an organic result, not just how many search.

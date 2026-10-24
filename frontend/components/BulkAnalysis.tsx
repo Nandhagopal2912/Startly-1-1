@@ -19,6 +19,8 @@ type Preview = {
   daily_cap: number;
   remaining_calls: number;
   fits_in_cap: boolean;
+  demo?: boolean;
+  unavailable?: number;
   items: { keyword: string; cached: boolean; has_volume: boolean }[];
 };
 
@@ -191,6 +193,11 @@ export function BulkAnalysis({
               {!preview.fits_in_cap && (
                 <p className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
                   This needs {preview.new_calls} API calls but only {preview.remaining_calls} are left today. Keywords past the cap will be skipped. Remove some, or raise MAX_API_CALLS_PER_DAY.
+                </p>
+              )}
+              {preview.demo && (preview.unavailable ?? 0) > 0 && (
+                <p className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-medium text-indigo-800">
+                  {preview.unavailable} keyword{preview.unavailable === 1 ? " isn't" : "s aren't"} in the public demo and will be skipped. Run Startly yourself to analyze any keyword.
                 </p>
               )}
               {preview.without_volume > 0 && (
