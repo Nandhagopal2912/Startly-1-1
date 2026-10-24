@@ -93,6 +93,7 @@ export function BulkAnalysis({
   mockMode,
   location,
   ownKey = null,
+  provider = null,
   onClose,
   onResults,
   onOpenKeyword,
@@ -101,6 +102,8 @@ export function BulkAnalysis({
   location: string;
   // Public demo with the visitor's own SerpApi key: searches run on that key and results stay in the browser.
   ownKey?: string | null;
+  // The server provider chosen in the header (normal mode); null = the server default.
+  provider?: string | null;
   onClose: () => void;
   onResults: (rows: AnalysisRow[]) => void;
   onOpenKeyword: (keyword: string) => void;
@@ -114,7 +117,7 @@ export function BulkAnalysis({
 
   const parsed = useMemo(() => parseKeywordList(text), [text]);
   const tooMany = parsed.length > MAX_KEYWORDS;
-  const body = { keywords: parsed, mock_mode: mockMode, location_name: location, language_name: "English" };
+  const body = { keywords: parsed, mock_mode: mockMode, location_name: location, language_name: "English", provider: provider ?? undefined };
 
   async function onPreview() {
     setError("");

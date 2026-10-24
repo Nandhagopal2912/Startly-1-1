@@ -578,6 +578,9 @@ def _keyword_section(row: dict[str, Any], st: dict[str, ParagraphStyle]) -> list
     ]
     if row.get("rescored"):
         flow.append(Paragraph("Older analysis: numbers recalculated with the current click model.", st["small"]))
+    if row.get("provider") == "serper":
+        flow.append(Paragraph("<font color='#b45309'>Data from Serper, which can't see AI Overviews: if Google shows one for this "
+                              "keyword, the clicks here are overestimated.</font>", st["small"]))
 
     stats = [
         ("Capturable clicks / month", _num(mid) if mid is not None else f"{float(s.get('organic_ctr_total') or 0):.1f}%",

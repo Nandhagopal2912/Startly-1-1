@@ -52,6 +52,12 @@ export function VerdictHero({
       {row.rescored && (
         <p className="mt-2 text-xs text-amber-700">Older analysis: numbers are recalculated with today&apos;s click model.</p>
       )}
+      {row.provider === "serper" && (
+        <p className="mt-2 text-xs text-amber-700">
+          Data from Serper, which can&apos;t see AI Overviews: if Google shows one for this keyword, clicks are overestimated. Re-check
+          with SerpApi before deciding.
+        </p>
+      )}
 
       <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-slate-100 pt-6 md:grid-cols-4 2xl:grid-cols-5">
         <div className="col-span-2 md:col-span-4 2xl:col-span-1">

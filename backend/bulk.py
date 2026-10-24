@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -33,6 +33,7 @@ class BulkRequest(BaseModel):
     location_name: str = "United States"
     language_name: str = "English"
     mock_mode: bool = False
+    provider: Literal["serpapi", "serper", "dataforseo"] | None = None  # see AnalyzeRequest.provider
 
 
 def dedupe_keywords(request: BulkRequest) -> tuple[list[BulkKeyword], int]:
@@ -97,6 +98,7 @@ def _analyze_one(item: BulkKeyword, request: BulkRequest, own_key: str | None = 
             language_name=request.language_name,
             mock_mode=request.mock_mode,
             search_volume=item.search_volume,
+            provider=request.provider,
         ))
         return {"keyword": item.keyword, "status": "ok", "analysis": analysis}
     except HTTPException as exc:

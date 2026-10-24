@@ -129,6 +129,46 @@ export async function postJson<T>(path: string, body: unknown, headers: Record<s
   return JSON.parse(text) as T;
 }
 
+// Which of the server's search providers this browser analyzes with (normal mode only; the demo ignores it).
+export type ProviderName = "serpapi" | "serper" | "dataforseo";
+const PROVIDER_KEY = "startly.serpProvider";
+
+export const PROVIDER_NOTES: Record<ProviderName, { tone: "ok" | "warn"; text: string }> = {
+  serpapi: {
+    tone: "ok",
+    text: "SerpApi detects AI Overviews, ads, maps and other features, so click estimates include their effect. Each new keyword uses 1 SerpApi search.",
+  },
+  serper: {
+    tone: "warn",
+    text: "Serper can't see AI Overviews, so capturable clicks come out too high for keywords that show one. Good for quick checks of long lists; use SerpApi before deciding.",
+  },
+  dataforseo: {
+    tone: "ok",
+    text: "DataForSEO detects AI Overviews and can supply search volume. Paid per search.",
+  },
+};
+
+export const ESTIMATE_NOTE =
+  "All numbers are estimates from published click-through research, not guarantees. Saved keywords keep their source until you re-check them.";
+
+export function readProviderChoice(): ProviderName | null {
+  try {
+    const v = window.localStorage.getItem(PROVIDER_KEY);
+    return v === "serpapi" || v === "serper" || v === "dataforseo" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeProviderChoice(p: ProviderName | null) {
+  try {
+    if (p) window.localStorage.setItem(PROVIDER_KEY, p);
+    else window.localStorage.removeItem(PROVIDER_KEY);
+  } catch {
+    /* storage unavailable: the choice lasts until the page reloads */
+  }
+}
+
 // Per-browser marker: analyses up to this id were cleared from the dashboard (history keeps them).
 const CLEARED_KEY = "startly.dashboardClearedAfterId";
 

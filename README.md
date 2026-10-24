@@ -18,7 +18,7 @@ An SEO tool that estimates how many searchers would actually click an organic re
     *   **Sourced Effects**: AI Overviews, local packs, image packs and ads reduce clicks by amounts taken from published CTR studies, each labelled with its confidence and source.
     *   **Zero-Click Risk**: Flags pages where Google answers the query itself.
 *   **Bulk Analysis**: Paste up to 50 keywords (optionally with volumes), see how many API calls the batch needs before running it, and get them ranked by capturable clicks.
-*   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode, chosen in `.env`.
+*   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode. The default is set in `.env`; a **Data source** switch in the header changes it per browser without a restart, with a note on what each source can and can't see (Serper misses AI Overviews, so its click estimates run high).
 *   **Cost Guardrails**: Local SQLite cache, remembered volumes, a daily cap on paid API calls, and live credit balances for your SerpApi and Serper keys in the header (`GET /credits`; free provider checks, cached for a minute, hidden in demo mode).
 *   **SERP Change Tracking**: Re-check a keyword to fetch Google's page again and see what changed since the last check: features that appeared or disappeared, sites that moved, and the effect on capturable clicks.
 *   **Saved History**: Every analysis is stored locally. The dashboard restores your recent keywords after a refresh, and the History page lets you search and reopen any past analysis without API calls.

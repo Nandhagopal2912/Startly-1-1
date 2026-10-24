@@ -25,7 +25,10 @@ import {
   postJson,
   readClearedAfterId,
   readHidden,
+  readProviderChoice,
   rowCountry,
+  type ProviderName,
+  writeProviderChoice,
   writeClearedAfterId,
 } from "../lib/analysis";
 import {
@@ -73,6 +76,8 @@ export default function HomePage() {
   const [savingVolume, setSavingVolume] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [creditsTick, setCreditsTick] = useState(0);
+  // Which server provider this browser analyzes with; null = the server's SERP_PROVIDER.
+  const [serpChoice, setSerpChoice] = useState<ProviderName | null>(null);
   const [demoKeywords, setDemoKeywords] = useState<string[]>([]);
   const demo = Boolean(usage?.demo_mode);
   // Visitor's own SerpApi key (public demo): kept in their browser, sent only with their searches.
@@ -146,6 +151,7 @@ export default function HomePage() {
     restoredOnce.current = true;
     refreshUsage();
     setOwnKey(readKey());
+    setSerpChoice(readProviderChoice());
     setLocalCount(listLocal().length);
     async function restore() {
       const params = new URLSearchParams(window.location.search);
@@ -212,6 +218,7 @@ export default function HomePage() {
         location_name: country,
         language_name: "English",
         mock_mode: mockMode && !demo,
+        provider: demo ? undefined : serpChoice ?? undefined,
         search_volume: volume.trim() === "" ? null : Number(volume.replace(/[,\s]/g, "")),
       });
       upsertRow(fresh);
@@ -343,6 +350,7 @@ export default function HomePage() {
           language_name: row.language_name ?? "English",
           mock_mode: row.mock_mode,
           refresh: true,
+          provider: serpChoice ?? undefined,
         })
       );
     } catch (err) {
@@ -436,6 +444,7 @@ export default function HomePage() {
           mockMode={mockMode}
           location={country}
           ownKey={demo ? ownKey : null}
+          provider={demo ? null : serpChoice}
           onClose={() => setBulkOpen(false)}
           onResults={addBulkResults}
           onOpenKeyword={(kw) => {
@@ -591,7 +600,16 @@ export default function HomePage() {
               </span>
             </label>
             )}
-            {!demo && <CreditsStatus refreshSignal={creditsTick} />}
+            {!demo && (
+              <CreditsStatus
+                refreshSignal={creditsTick}
+                selected={serpChoice}
+                onSelect={(choice) => {
+                  setSerpChoice(choice);
+                  writeProviderChoice(choice);
+                }}
+              />
+            )}
           </div>
         </div>
       </header>

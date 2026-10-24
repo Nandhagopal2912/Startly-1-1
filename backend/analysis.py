@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -31,6 +31,8 @@ class AnalyzeRequest(BaseModel):
     cache_only: bool = False
     # With the visitor's own key only: their previous check of this keyword, kept in their browser.
     previous: PreviousCheck | None = None
+    # Which of the server's providers to search with (default: SERP_PROVIDER). Ignored in DEMO_MODE.
+    provider: Literal["serpapi", "serper", "dataforseo"] | None = None
 
 
 def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
@@ -108,7 +110,7 @@ def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
         snapshot_id, payload = found
         source = "cache"
     else:
-        provider = get_serp_provider("mock" if request.mock_mode else None)
+        provider = get_serp_provider("mock" if request.mock_mode else request.provider)
         payload = provider.fetch_serp(kw, loc, lang)
         snapshot_id = store.save_snapshot(kw, loc, lang, request.mock_mode, payload)
         source = "api"
