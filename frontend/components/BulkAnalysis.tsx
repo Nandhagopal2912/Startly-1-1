@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, ListOrdered, Loader2, X } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import { type AnalysisRow, clickTier, clicksValue, hasVolume, postJson, volumeLabel } from "../lib/analysis";
-import { KEY_HEADER, type LocalAnalysis, latestLocal, previousCheck, previousLocal, updateLocal } from "../lib/ownKey";
+import { KEY_HEADER, type LocalAnalysis, keyTransportIsSecure, latestLocal, previousCheck, previousLocal, updateLocal } from "../lib/ownKey";
 
 const MAX_KEYWORDS = 50;
 
@@ -146,6 +146,7 @@ export function BulkAnalysis({
   }
 
   async function runWithOwnKey(key: string): Promise<BulkResponse> {
+    if (!keyTransportIsSecure()) throw new Error("Keys are only sent over HTTPS. Open the site at its https:// address.");
     const { items } = dedupe(parsed);
     const saved: BulkResult[] = [];
     const toSearch: ParsedKeyword[] = [];

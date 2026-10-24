@@ -37,6 +37,7 @@ import {
   getLocal,
   hideAllLocal,
   hideLocal,
+  keyTransportIsSecure,
   latestLocal,
   listLocal,
   previousCheck,
@@ -74,7 +75,8 @@ export default function HomePage() {
   const [keyInfo, setKeyInfo] = useState<KeyInfo | null>(null);
   const [keyDialog, setKeyDialog] = useState<{ reason?: string } | null>(null);
   const [localCount, setLocalCount] = useState(0);
-  const keyHeaders = ownKey ? { [KEY_HEADER]: ownKey } : undefined;
+  // Never send the key over an insecure connection, even if one is saved (lib/ownKey.ts keyTransportIsSecure).
+  const keyHeaders = ownKey && keyTransportIsSecure() ? { [KEY_HEADER]: ownKey } : undefined;
   const restoredOnce = useRef(false);
 
   function countSearchOnOwnKey() {
@@ -105,7 +107,7 @@ export default function HomePage() {
 
   // Show how many searches the visitor's key has left (SerpApi's account check is free).
   useEffect(() => {
-    if (!demo || !ownKey) return;
+    if (!demo || !ownKey || !keyTransportIsSecure()) return;
     postJson<KeyInfo>("/key/check", {}, { [KEY_HEADER]: ownKey })
       .then(setKeyInfo)
       .catch(() => setKeyInfo(null));
@@ -224,7 +226,10 @@ export default function HomePage() {
 
   // Search on the visitor's own key; the result (and its results page) is saved in their browser.
   async function analyzeWithOwnKey(text: string, searchVolume: number | null, previous?: AnalysisRow) {
-    if (!ownKey) return;
+    if (!ownKey || !keyHeaders) {
+      setKeyDialog({});
+      return;
+    }
     setLoading(true);
     try {
       const fresh = await postJson<AnalysisRow>(
@@ -295,6 +300,10 @@ export default function HomePage() {
   async function recheck(row: AnalysisRow) {
     if (!row.mock_mode && !window.confirm(`Re-check "${row.keyword}" now?\n\n${recheckCostNote(row)}`)) return;
     if (demo && ownKey) {
+      if (!keyHeaders) {
+        setKeyDialog({});
+        return;
+      }
       setRechecking(true);
       setError("");
       try {

@@ -9,7 +9,7 @@ import usage
 from db import connect
 from main import app
 
-client = TestClient(app)
+client = TestClient(app, base_url="https://testserver")
 KEY = "abc123visitorkey456def789"
 HEADERS = {"X-SerpApi-Key": KEY}
 
@@ -154,3 +154,35 @@ def test_cors_allows_the_key_header():
     })
     assert res.status_code == 200
     assert "x-serpapi-key" in res.headers.get("access-control-allow-headers", "").lower()
+
+
+def test_keys_over_plain_http_are_refused_except_on_localhost(monkeypatch):
+    sent = []
+    fake_serpapi(monkeypatch, sent)
+    remote = TestClient(app, base_url="http://startly.example")
+    res = remote.post("/analyze", headers=HEADERS, json={"keyword": "kw"})
+    assert res.status_code == 400 and "HTTPS" in res.json()["detail"]
+    assert remote.post("/key/check", headers=HEADERS).status_code == 400
+    assert sent == []
+
+    local = TestClient(app, base_url="http://127.0.0.1:8000")
+    assert local.post("/analyze", headers=HEADERS, json={"keyword": "kw"}).status_code == 200
+
+
+def test_proxy_reported_https_is_trusted_only_when_configured(monkeypatch):
+    sent = []
+    fake_serpapi(monkeypatch, sent)
+    remote = TestClient(app, base_url="http://startly.example")
+    behind_proxy = {**HEADERS, "X-Forwarded-Proto": "https"}
+    assert remote.post("/analyze", headers=behind_proxy, json={"keyword": "kw"}).status_code == 400
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    assert remote.post("/analyze", headers=behind_proxy, json={"keyword": "kw"}).status_code == 200
+
+
+def test_responses_are_not_cached_and_https_gets_hsts():
+    secure = client.get("/health")
+    assert secure.headers["cache-control"] == "no-store"
+    assert secure.headers["x-content-type-options"] == "nosniff"
+    assert "max-age" in secure.headers["strict-transport-security"]
+    plain = TestClient(app, base_url="http://127.0.0.1:8000").get("/health")
+    assert "strict-transport-security" not in plain.headers

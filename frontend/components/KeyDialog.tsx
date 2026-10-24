@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, ShieldCheck, X } from "lucide-react";
 import { postJson } from "../lib/analysis";
-import { KEY_HEADER, SERPAPI_SIGNUP_URL, keyIsRemembered, readKey } from "../lib/ownKey";
+import { KEY_HEADER, SERPAPI_SIGNUP_URL, keyIsRemembered, keyTransportIsSecure, readKey } from "../lib/ownKey";
 
 export type KeyInfo = { plan_name: string | null; searches_per_month: number | null; searches_left: number | null };
 
@@ -27,11 +27,12 @@ export function KeyDialog({
   const [remember, setRemember] = useState(existing ? keyIsRemembered() : true);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
+  const secure = keyTransportIsSecure();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const trimmed = key.trim();
-    if (!trimmed) return;
+    if (!trimmed || !secure) return;
     setError("");
     setChecking(true);
     try {
@@ -59,6 +60,12 @@ export function KeyDialog({
 
         <form onSubmit={submit} className="space-y-4 px-6 py-5">
           {reason && <p className="rounded-2xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900">{reason}</p>}
+          {!secure && (
+            <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+              This page or its API isn&apos;t using HTTPS, so a key typed here could be read in transit. Keys are disabled until the site is
+              served over https://.
+            </p>
+          )}
           <p className="text-sm leading-relaxed text-slate-600">
             The samples are free to explore. To analyze your own keywords, use a SerpApi key: the{" "}
             <a href={SERPAPI_SIGNUP_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-indigo-600 hover:underline">
@@ -97,7 +104,7 @@ export function KeyDialog({
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               type="submit"
-              disabled={checking || !key.trim()}
+              disabled={checking || !key.trim() || !secure}
               className="inline-flex h-10 items-center gap-2 rounded-xl premium-gradient px-5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {checking ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}

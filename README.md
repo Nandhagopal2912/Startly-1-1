@@ -82,6 +82,12 @@ Fill the demo database first by analyzing your sample keywords locally (with you
 - `POST /key/check` validates a key and shows searches left, using SerpApi's free account endpoint.
 - These searches use the visitor's quota, not yours, and don't count toward `MAX_API_CALLS_PER_DAY`.
 
+**Serve the demo over HTTPS.** Keys are refused over plain HTTP everywhere except `localhost`: the backend rejects them, and the key dialog is disabled. Behind a hosting proxy, set `TRUST_PROXY_HEADERS=true` so the backend sees the original `https` scheme. Other protections:
+- **Content Security Policy** with a per-request nonce (`frontend/middleware.ts`). The page can only run its own scripts and only connect to itself and the API, so injected code can't send a key to another site by fetch, image or form.
+- **HSTS** on HTTPS responses, so browsers keep using HTTPS.
+- **`Cache-Control: no-store`** on API responses, so browsers and proxies keep no copies.
+- Leave `SERPAPI_API_KEY` empty on the hosted server. The demo doesn't need it.
+
 Never deploy with `DEMO_MODE=false` and your own API key: anyone could use your credits.
 
 ## 🧠 Methodology

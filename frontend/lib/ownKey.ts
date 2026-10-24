@@ -1,6 +1,6 @@
 // Everything a visitor does with their own SerpApi key lives in their browser: the key itself and their
 // analyses. The server never stores either (see backend/stateless.py).
-import type { AnalysisRow } from "./analysis";
+import { API_BASE, type AnalysisRow } from "./analysis";
 
 const KEY_STORAGE = "startly.serpapiKey";
 const ANALYSES_STORAGE = "startly.localAnalyses";
@@ -13,6 +13,20 @@ export const SERPAPI_SIGNUP_URL = "https://serpapi.com/users/sign_up";
 export type LocalAnalysis = AnalysisRow & { local_id: string; hidden?: boolean };
 
 // --- the key ---
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** A key may only travel over HTTPS (or stay on this machine): both this page and the API must be secure. */
+export function keyTransportIsSecure(): boolean {
+  try {
+    const api = new URL(API_BASE);
+    const apiSecure = api.protocol === "https:" || LOCAL_HOSTS.has(api.hostname);
+    return apiSecure && window.isSecureContext;
+  } catch {
+    return false;
+  }
+}
+
 
 // "Remember on this device" keeps it in localStorage; otherwise sessionStorage (gone when the tab closes).
 export function readKey(): string | null {

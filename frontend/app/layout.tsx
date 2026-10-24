@@ -5,6 +5,9 @@ import { ReactNode } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
 
+// Render per request so each page gets the CSP nonce from middleware.ts (a pre-built page would have none).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Startly Analyze",
   description: "How many organic clicks a keyword can really bring, after AI Overviews, ads and maps."
