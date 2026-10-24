@@ -14,6 +14,14 @@ from usage import record_call
 
 SEARCH_URL = "https://serpapi.com/search.json"
 
+# Country code (as in COUNTRY_CODES) -> Google domain to search on.
+GOOGLE_DOMAINS = {
+    "us": "google.com", "uk": "google.co.uk", "in": "google.co.in", "ca": "google.ca",
+    "au": "google.com.au", "de": "google.de", "fr": "google.fr", "es": "google.es", "it": "google.it",
+    "nl": "google.nl", "br": "google.com.br", "mx": "google.com.mx", "jp": "google.co.jp",
+    "sg": "google.com.sg", "ae": "google.ae", "za": "google.co.za", "nz": "google.co.nz", "ie": "google.ie",
+}
+
 # SerpApi response key -> Startly item type (DataForSEO vocabulary). Lists add one item each.
 LIST_FEATURES = {
     "organic_results": "organic",
@@ -76,10 +84,15 @@ class SerpApiProvider:
                 detail="SerpApi is not configured. Set SERPAPI_API_KEY in backend/.env (free key at serpapi.com).",
             )
         record_call(self.name, "search", keyword)
+        country = COUNTRY_CODES.get(location_name.strip().lower(), "us")
         params = {
             "engine": "google",
             "q": keyword,
-            "gl": COUNTRY_CODES.get(location_name.strip().lower(), "us"),
+            # Without `location` and `google_domain`, SerpApi's results can follow where its servers are:
+            # a re-check of "what is a roth ira" with only gl/hl came back with pages about people named Roth.
+            "location": location_name.strip() or "United States",
+            "google_domain": GOOGLE_DOMAINS.get(country, "google.com"),
+            "gl": country,
             "hl": LANGUAGE_CODES.get(language_name.strip().lower(), "en"),
             "api_key": api_key,
         }

@@ -86,4 +86,18 @@ def test_end_to_end_ai_overview_reduces_clicks(monkeypatch):
     assert len(positions) == 8 and positions[0]["position"] == 1
     assert "Zero-Click Search Risk" in [s["title"] for s in body["report"]["sections"]]
     assert sent[0]["engine"] == "google" and sent[0]["gl"] == "us"
+    assert sent[0]["location"] == "United States" and sent[0]["google_domain"] == "google.com"
+
+
+def test_location_and_domain_follow_the_requested_country(monkeypatch):
+    monkeypatch.setenv("SERPAPI_API_KEY", "k")
+    sent = []
+
+    def fake_get(url, params, timeout):
+        sent.append(params)
+        return FakeResponse({"organic_results": []})
+
+    monkeypatch.setattr(serpapi.requests, "get", fake_get)
+    SerpApiProvider().fetch_serp("crm", "India", "English")
+    assert (sent[0]["location"], sent[0]["google_domain"], sent[0]["gl"]) == ("India", "google.co.in", "in")
     assert usage.calls_today() == 1
