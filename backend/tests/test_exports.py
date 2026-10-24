@@ -125,3 +125,37 @@ def test_empty_export_is_rejected():
 def test_browser_can_read_the_export_file_name():
     res = client.post("/report", headers={"Origin": "http://localhost:3000"}, json={"rows": [roth_row()], "format": "csv"})
     assert "content-disposition" in res.headers.get("access-control-expose-headers", "").lower()
+
+
+def multiscript_row(keyword, **extra):
+    snap = {"keyword": keyword, "provider": "serpapi", "keyword_data": {},
+            "items": [{"type": "organic", "domain": f"site{i}.com", "rank_group": i} for i in range(1, 6)]}
+    return {**analyze_payload(snap, keyword, volume_override=5000), "provider": "serpapi", **extra}
+
+
+def test_pdf_embeds_fonts_for_keywords_in_other_scripts():
+    rows = [multiscript_row(k) for k in ("डिजिटल मार्केटिंग", "தமிழ் இணையதளம்", "تسويق رقمي", "デジタル 東京", "маркетинг")]
+    pdf = client.post("/report", json={"rows": rows, "format": "pdf"}).content
+    for font in (b"NotoSansDevanagari", b"NotoSansTamil", b"NotoSansArabic", b"HeiseiKakuGo-W5", b"NotoSans"):
+        assert font in pdf, font
+
+
+def test_english_only_report_needs_no_extra_fonts():
+    pdf = client.post("/report", json={"rows": [plain_row("best crm", 1000)], "format": "pdf"}).content
+    assert b"NotoSans" not in pdf
+
+
+def test_font_runs_switch_only_where_needed():
+    from pdf_fonts import chart_font, chart_text, font_markup
+
+    assert font_markup("café & crème") == "café &amp; crème"
+    assert font_markup("crm для бизнеса") == 'crm <font name="NotoSans">для бизнеса</font>'
+    assert font_markup("для", bold=True) == '<font name="NotoSans"><b>для</b></font>'
+    assert chart_font("デジタル 東京") == "HeiseiKakuGo-W5" and chart_font("数字营销") == "STSong-Light"
+    assert chart_text("تسويق رقمي") == "رقمي تسويق"  # right-to-left phrase in reading order
+
+
+def test_mock_rows_are_flagged_in_the_pdf():
+    mock = {**plain_row("mock kw", 1000), "mock_mode": True}
+    pdf = client.post("/report", json={"rows": [mock, plain_row("real kw", 2000)], "format": "pdf"}).content
+    assert pdf.startswith(b"%PDF") and page_count(pdf) >= 6

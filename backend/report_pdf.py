@@ -9,7 +9,6 @@ import math
 from datetime import datetime, timezone
 from statistics import median
 from typing import Any
-from xml.sax.saxutils import escape
 
 from reportlab.graphics.shapes import Circle, Drawing, Group, Line, Rect, String
 from reportlab.lib import colors
@@ -32,6 +31,7 @@ from reportlab.platypus import (
 from reportlab.platypus.tableofcontents import TableOfContents
 
 from ctr_config import BASELINE_SOURCE, FEATURES, NEUTRAL_FEATURES
+from pdf_fonts import chart_font, chart_text, font_markup, register_fonts
 from insights import TOP3_CLICKS_LOW, TOP3_CLICKS_WORTH
 from report_data import (
     METHODOLOGY_URL,
@@ -68,20 +68,22 @@ TONES = {"good": colors.HexColor("#059669"), "neutral": colors.HexColor("#d97706
 
 # --- text helpers ---
 
-def _t(text: Any) -> str:
-    """Escape for ReportLab markup and replace characters the built-in Helvetica can't draw."""
+def _clean(text: Any) -> str:
     s = str(text if text is not None else "")
-    for bad, good in (("→", "to"), ("≈", "~"), ("−", "-"), ("‑", "-"), (" ", " ")):
-        s = s.replace(bad, good)
-    return escape(s)
-
-
-def _plain(text: Any) -> str:
-    """Same replacements for text drawn directly on charts (no markup)."""
-    s = str(text if text is not None else "")
-    for bad, good in (("→", "to"), ("≈", "~"), ("−", "-"), ("‑", "-")):
+    for bad, good in (("→", "to"), ("≈", "~"), ("−", "-"), ("‑", "-"), ("\u2009", " ")):
         s = s.replace(bad, good)
     return s
+
+
+def _t(text: Any, bold: bool = False) -> str:
+    """Paragraph markup: escaped, with keywords in any script drawn in a font that has their glyphs."""
+    return font_markup(_clean(text), bold=bold)
+
+
+def _label(d: Drawing, x: float, y: float, text: Any, size: float, color, bold: bool = False, anchor: str = "start") -> None:
+    """A chart label that may contain any script (keywords, domains)."""
+    raw = _clean(text)
+    d.add(String(x, y, chart_text(raw), fontName=chart_font(raw, bold), fontSize=size, fillColor=color, textAnchor=anchor))
 
 
 def _num(value: Any) -> str:
@@ -136,7 +138,7 @@ def _styles() -> dict[str, ParagraphStyle]:
 
 
 def _heading(text: str, style: ParagraphStyle, toc_level: int | None = None) -> Paragraph:
-    p = Paragraph(_t(text), style)
+    p = Paragraph(_t(text, bold=True), style)
     if toc_level is not None:
         p._toc = (toc_level, text)  # picked up by ReportDoc.afterFlowable
     return p
@@ -154,6 +156,30 @@ _GRID = TableStyle([
     ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
     ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
 ])
+
+
+REPO_URL = "github.com/Nandhagopal2912/Startly-1-1"
+PROVIDER_NAMES = {"serpapi": "SerpApi", "serper": "Serper", "dataforseo": "DataForSEO"}
+DISCLAIMER = ("Estimates, not guarantees. Based on Google results retrieved through third-party search APIs and on published "
+              "click-through-rate research. Startly is not affiliated with or endorsed by Google.")
+
+
+def _sources(order: list[dict[str, Any]]) -> str:
+    names = sorted({PROVIDER_NAMES.get(r.get("provider") or "", "") for r in order} - {""})
+    return ", ".join(names) if names else "a search data provider"
+
+
+def _checked_range(order: list[dict[str, Any]]) -> str:
+    """'Results checked 24 Oct 2026' or 'Results checked 21 Oct - 24 Oct 2026'."""
+    dates = sorted(d for d in (r.get("analyzed_at") or "" for r in order) if d)
+    if not dates:
+        return ""
+    first, last = when(dates[0]), when(dates[-1])
+    return f"Results checked {first}" if first == last else f"Results checked {first} - {last}"
+
+
+def _mock_count(order: list[dict[str, Any]]) -> int:
+    return sum(1 for r in order if r.get("mock_mode"))
 
 
 # --- charts ---
@@ -176,7 +202,7 @@ def chart_searches_vs_clicks(rows: list[dict[str, Any]], width: float = CONTENT_
     for i, r in enumerate(data):
         y = d.height - 22 - i * row_h - 9
         mid = float(clicks(r)[0])
-        d.add(String(0, y + 2, _clip(_plain(r.get("keyword", "")), 34), fontName="Helvetica", fontSize=8, fillColor=INK))
+        _label(d, 0, y + 2, _clip(str(r.get("keyword", "")), 34), 8, INK)
         d.add(Rect(label_w, y, bar_w * float(r["raw_volume"]) / top, 10, fillColor=SEARCHES, strokeColor=None))
         d.add(Rect(label_w, y, bar_w * mid / top, 10, fillColor=ACCENT, strokeColor=None))
         d.add(String(label_w + bar_w + 6, y + 2, f"{mid:,.0f} of {float(r['raw_volume']):,.0f}",
@@ -220,8 +246,24 @@ def chart_opportunity_map(rows: list[dict[str, Any]], width: float = CONTENT_W, 
     rotated = Group(label)
     rotated.rotate(90)
     d.add(rotated)
+    placed: list[tuple[float, float]] = []
+    # Nearby offsets to try, closest first; a moved dot keeps a thin line to its true position.
+    offsets = [(0, 0)] + [(dx, dy) for r_ in (15, 30) for dx, dy in
+                          ((r_, 0), (0, r_), (-r_, 0), (0, -r_), (r_, r_), (-r_, r_), (r_, -r_), (-r_, -r_))]
     for rank, r in data:
-        x, y = px(float(summary(r).get("penalty_percent") or 0)), py(float(clicks(r)[0]))
+        tx, ty = px(float(summary(r).get("penalty_percent") or 0)), py(float(clicks(r)[0]))
+        x, y = tx, ty
+        for dx, dy in offsets:
+            cx, cy = tx + dx, ty + dy
+            inside = left + 7 <= cx <= left + plot_w - 7 and bottom + 7 <= cy <= bottom + plot_h - 7
+            if (dx, dy) == (0, 0) or inside:
+                if all((cx - ox) ** 2 + (cy - oy) ** 2 >= 14.5 ** 2 for ox, oy in placed):
+                    x, y = cx, cy
+                    break
+        placed.append((x, y))
+        if (x, y) != (tx, ty):
+            d.add(Line(tx, ty, x, y, strokeColor=FAINT, strokeWidth=0.6))
+            d.add(Circle(tx, ty, 1.6, fillColor=FAINT, strokeColor=None))
         color = TONES.get(verdict(r).get("tone", "unknown"), MUTED)
         d.add(Circle(x, y, 7, fillColor=color, strokeColor=colors.white, strokeWidth=1))
         d.add(String(x, y - 2.6, str(rank), fontName="Helvetica-Bold", fontSize=7, fillColor=colors.white, textAnchor="middle"))
@@ -259,7 +301,7 @@ def chart_positions(row: dict[str, Any], width: float = CONTENT_W) -> Drawing:
     for i, p in enumerate(rows):
         y = d.height - (i + 1) * row_h + 3
         name = f"#{p.get('position')}  {p.get('domain') or 'Position ' + str(p.get('position'))}"
-        d.add(String(0, y + 1.5, _clip(_plain(name), 40), fontName="Helvetica", fontSize=8, fillColor=INK))
+        _label(d, 0, y + 1.5, _clip(name, 40), 8, INK)
         if high(p) > value(p):
             d.add(Rect(label_w, y, bar_w * high(p) / top, 9, fillColor=ACCENT_LIGHT, strokeColor=None))
         d.add(Rect(label_w, y, bar_w * value(p) / top, 9, fillColor=ACCENT, strokeColor=None))
@@ -324,7 +366,7 @@ class ReportDoc(BaseDocTemplate):
             key = f"h{id(flowable)}"
             self.canv.bookmarkPage(key)
             self.canv.addOutlineEntry(text, key, level=level, closed=level > 0)
-            self.notify("TOCEntry", (level, text, self.page, key))
+            self.notify("TOCEntry", (level, font_markup(text), self.page, key))
 
 
 def _headline(order: list[dict[str, Any]]) -> list[tuple[str, str]]:
@@ -345,6 +387,9 @@ def _cover_painter(order: list[dict[str, Any]], generated: str):
     countries = sorted({r.get("location_name") or "United States" for r in order})
     headline = _headline(order)
     scope = f"{len(order)} keyword{'s' if len(order) != 1 else ''} · {', '.join(countries)}"
+    checked = _checked_range(order)
+    mock = _mock_count(order)
+    sources = _sources(order)
 
     def paint(canvas, doc):
         canvas.saveState()
@@ -358,8 +403,8 @@ def _cover_painter(order: list[dict[str, Any]], generated: str):
         canvas.drawString(MARGIN, PAGE_H - 62 * mm, "Keyword opportunity")
         canvas.drawString(MARGIN, PAGE_H - 75 * mm, "report")
         canvas.setFont("Helvetica", 11.5)
-        canvas.drawString(MARGIN, PAGE_H - 90 * mm, _plain(scope))
-        canvas.drawString(MARGIN, PAGE_H - 97 * mm, f"Generated {generated}")
+        canvas.drawString(MARGIN, PAGE_H - 90 * mm, _clean(scope))
+        canvas.drawString(MARGIN, PAGE_H - 97 * mm, f"Generated {generated}" + (f" · {checked}" if checked else ""))
         # Headline numbers
         box_w, box_h, gap = (CONTENT_W - 3 * 4 * mm) / 4, 26 * mm, 4 * mm
         y = PAGE_H - band - 18 * mm - box_h
@@ -372,8 +417,8 @@ def _cover_painter(order: list[dict[str, Any]], generated: str):
             canvas.setFont("Helvetica", 7.5)
             canvas.drawString(x + 4 * mm, y + box_h - 7 * mm, label)
             canvas.setFillColor(INK)
-            canvas.setFont("Helvetica-Bold", 15 if len(value) < 12 else 10)
-            canvas.drawString(x + 4 * mm, y + 7 * mm, _plain(value))
+            canvas.setFont(chart_font(_clean(value), bold=True), 15 if len(value) < 12 else 10)
+            canvas.drawString(x + 4 * mm, y + 7 * mm, chart_text(_clean(value)))
         canvas.setFillColor(BODY)
         canvas.setFont("Helvetica", 10)
         text = canvas.beginText(MARGIN, y - 16 * mm)
@@ -387,9 +432,18 @@ def _cover_painter(order: list[dict[str, Any]], generated: str):
         ):
             text.textLine(line)
         canvas.drawText(text)
+        if mock:
+            canvas.setFillColor(colors.HexColor("#b45309"))
+            canvas.setFont("Helvetica-Bold", 9)
+            canvas.drawString(MARGIN, 38 * mm, f"{mock} of {len(order)} keyword{'s use' if mock != 1 else ' uses'} mock (test) data, "
+                                               "marked MOCK in the report. Mock results are not real.")
         canvas.setFillColor(FAINT)
         canvas.setFont("Helvetica", 8)
-        canvas.drawString(MARGIN, 14 * mm, "Estimates use published click-through-rate research. See \"Method and sources\" at the end.")
+        lines = [f"Search results from {sources}. Click-through rates from published research; see \"Method and sources\".",
+                 "Estimates, not guarantees. Startly is not affiliated with or endorsed by Google.",
+                 f"Made with Startly Analyze, an open-source tool: {REPO_URL}"]
+        for i, line in enumerate(lines):
+            canvas.drawString(MARGIN, (24 - i * 4.5) * mm, line)
         canvas.restoreState()
 
     return paint
@@ -401,7 +455,7 @@ def _findings(order: list[dict[str, Any]]) -> list[str]:
     if with_volume:
         best = with_volume[0]
         v = verdict(best)
-        out.append(f"<b>Best opportunity: {_t(best['keyword'])}.</b> About {_num(clicks(best)[0])} capturable clicks a month; "
+        out.append(f"<b>Best opportunity:</b> {_t(best['keyword'], bold=True)}<b>.</b> About {_num(clicks(best)[0])} capturable clicks a month; "
                    f"a #1 ranking is worth about {_num(v.get('top1_clicks'))}.")
         searches = sum(float(r["raw_volume"]) for r in with_volume)
         capture = sum(float(clicks(r)[0]) for r in with_volume)
@@ -418,7 +472,7 @@ def _findings(order: list[dict[str, Any]]) -> list[str]:
     hostile = [r for r in order if (summary(r).get("penalty_percent") or 0) >= 50]
     if hostile:
         worst = max(hostile, key=lambda r: summary(r).get("penalty_percent") or 0)
-        out.append(f"<b>Google keeps the most on {_t(worst['keyword'])}:</b> SERP features take about "
+        out.append(f"<b>Google keeps the most on</b> {_t(worst['keyword'], bold=True)}<b>:</b> SERP features take about "
                    f"{summary(worst).get('penalty_percent')}% of its organic clicks"
                    + (f" ({len(hostile)} keywords lose half or more)." if len(hostile) > 1 else "."))
     aio = [r for r in order if "ai_overview" in (summary(r).get("non_organic_types") or [])]
@@ -440,7 +494,8 @@ def _summary_section(order: list[dict[str, Any]], st: dict[str, ParagraphStyle])
         mid, low, high = clicks(row)
         shown = _num(mid) + (f"<br/><font size=7 color='#64748b'>{_num(low)}-{_num(high)}</font>" if mid is not None and low != high else "")
         data.append([
-            Paragraph(str(i), st["cell"]), Paragraph(f"<b>{_t(row.get('keyword', ''))}</b>", st["cell"]),
+            Paragraph(str(i), st["cell"]),
+            Paragraph(_t(row.get("keyword", ""), bold=True) + (" <font size=7 color='#b45309'>MOCK</font>" if row.get("mock_mode") else ""), st["cell"]),
             Paragraph(_verdict_markup(v), st["cell"]), Paragraph(shown, st["cell"]),
             Paragraph(_num(v.get("top1_clicks")), st["cell"]),
             Paragraph(f"{summary(row).get('penalty_percent', 0)}%", st["cell"]),
@@ -452,13 +507,16 @@ def _summary_section(order: list[dict[str, Any]], st: dict[str, ParagraphStyle])
     if any(clicks(r)[0] is not None for r in order):
         flow += [
             Paragraph("Searches vs clicks you can capture", st["h3"]),
-            Paragraph("The light bar is all monthly searches; the dark part is what's left for organic results on page one.", st["muted"]),
+            Paragraph("The light bar is all monthly searches; the dark part is what's left for organic results on page one."
+                      + (f" Showing the top 12 of {sum(1 for r in order if clicks(r)[0] is not None)} keywords with a known volume."
+                         if sum(1 for r in order if clicks(r)[0] is not None) > 12 else ""), st["muted"]),
             Spacer(1, 4), chart_searches_vs_clicks(order),
         ]
         flow += [KeepTogether([
             Paragraph("Opportunity map", st["h3"]),
             Paragraph("Each dot is a keyword, numbered as in the ranking above and colored by verdict. Up means more clicks; "
-                      "right means Google's own features take more of them. The best targets sit top left.", st["muted"]),
+                      "right means Google's own features take more of them. The best targets sit top left. "
+                      "Dots that would overlap are moved slightly, with a thin line to their exact position.", st["muted"]),
             Spacer(1, 4), chart_opportunity_map(order),
         ])]
     return flow
@@ -506,6 +564,16 @@ def _keyword_section(row: dict[str, Any], st: dict[str, ParagraphStyle]) -> list
         _heading(row.get("keyword", ""), st["h2"], 1),
         Paragraph(_t(" · ".join(meta)), st["muted"]),
         Spacer(1, 6),
+    ]
+    if row.get("mock_mode"):
+        banner = Table([[Paragraph("<b>Mock data.</b> These results were generated for testing and are not real Google results. "
+                                   "Don't use them for decisions.", st["body"])]], colWidths=[CONTENT_W])
+        banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fef3c7")),
+                                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#f59e0b")),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6),
+                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
+        flow += [banner, Spacer(1, 8)]
+    flow += [
         Paragraph(f"{_verdict_markup(v)} &nbsp; {_t(v.get('reason', ''))}", st["body"]),
     ]
     if row.get("rescored"):
@@ -565,7 +633,7 @@ def _keyword_section(row: dict[str, Any], st: dict[str, ParagraphStyle]) -> list
     return flow
 
 
-def _method_section(st: dict[str, ParagraphStyle]) -> list[Any]:
+def _method_section(st: dict[str, ParagraphStyle], sources: str) -> list[Any]:
     head = ["Feature", "Effect at #1", "Confidence", "Source"]
     data = [[Paragraph(h, st["cell_head"]) for h in head]]
     for f in FEATURES.values():
@@ -595,12 +663,16 @@ def _method_section(st: dict[str, ParagraphStyle]) -> list[Any]:
         Paragraph(f"No penalty, because the data shows none or isn't reliable yet: {_t(neutral)}.", st["muted"]),
         Paragraph("Limitations", st["h3"]),
         *[Paragraph(_t(line), st["body"], bulletText="•") for line in limits],
+        Paragraph("Data and disclaimer", st["h3"]),
+        Paragraph(f"Search results were retrieved from Google through {_t(sources)}, on the dates shown on each keyword page. "
+                  "Monthly search volumes come from the source shown with each keyword (usually entered by the user). " + _t(DISCLAIMER), st["body"]),
         Spacer(1, 8),
         Paragraph(f"Full methodology, numbers and sources: {_t(METHODOLOGY_URL)}", st["muted"]),
     ]
 
 
 def generate_pdf(rows: list[dict[str, Any]]) -> bytes:
+    register_fonts()
     st = _styles()
     generated = datetime.now(timezone.utc).strftime("%d %b %Y")
     order = ranked(rows)
@@ -619,9 +691,9 @@ def generate_pdf(rows: list[dict[str, Any]]) -> bytes:
             story += [_heading("Keyword details", st["h1"], 0),
                       Paragraph("One page per keyword, in ranked order.", st["muted"]), Spacer(1, 10)]
         story += _keyword_section(row, st)
-    story += [PageBreak()] + _method_section(st)
+    story += [PageBreak()] + _method_section(st, _sources(order))
 
     buffer = io.BytesIO()
-    doc = ReportDoc(buffer, _cover_painter(order, generated), f"Startly Analyze · Keyword opportunity report · {generated}")
+    doc = ReportDoc(buffer, _cover_painter(order, generated), f"Startly Analyze · {REPO_URL} · generated {generated}")
     doc.multiBuild(story)  # two passes so the contents can list page numbers
     return buffer.getvalue()
