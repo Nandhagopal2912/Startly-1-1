@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
 
-// Render per request so each page gets the CSP nonce from middleware.ts (a pre-built page would have none).
+// Render per request so each page gets the CSP nonce from proxy.ts (a pre-built page would have none).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

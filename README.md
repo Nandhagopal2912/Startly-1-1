@@ -56,6 +56,7 @@ uvicorn main:app --reload --port 8000
 ```
 
 ### 2) Frontend Setup
+Needs Node.js 20.9 or newer (an LTS release such as 22 or 24 is best).
 ```bash
 cd frontend
 npm install
@@ -83,7 +84,7 @@ The sample keywords ship with the code in `backend/demo_data/seed.json`. When a 
 - These searches use the visitor's quota, not yours, and don't count toward `MAX_API_CALLS_PER_DAY`.
 
 **Serve the demo over HTTPS.** Keys are refused over plain HTTP everywhere except `localhost`: the backend rejects them, and the key dialog is disabled. Behind a hosting proxy, set `TRUST_PROXY_HEADERS=true` so the backend sees the original `https` scheme. Other protections:
-- **Content Security Policy** with a per-request nonce (`frontend/middleware.ts`). The page can only run its own scripts and only connect to itself and the API, so injected code can't send a key to another site by fetch, image or form.
+- **Content Security Policy** with a per-request nonce (`frontend/proxy.ts`). The page can only run its own scripts and only connect to itself and the API, so injected code can't send a key to another site by fetch, image or form.
 - **HSTS** on HTTPS responses, so browsers keep using HTTPS.
 - **`Cache-Control: no-store`** on API responses, so browsers and proxies keep no copies.
 - Leave `SERPAPI_API_KEY` empty on the hosted server. The demo doesn't need it.

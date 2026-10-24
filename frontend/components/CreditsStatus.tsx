@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Info, RefreshCw } from "lucide-react";
 import { API_BASE, ESTIMATE_NOTE, PROVIDER_NOTES, type ProviderName } from "../lib/analysis";
 import { cn } from "../lib/utils";
@@ -20,6 +20,16 @@ type ProviderCredits = {
 
 type CreditsResponse = { demo: boolean; providers: ProviderCredits[]; daily_cap?: number; calls_today?: number };
 
+// The balances, or null when the backend can't be reached.
+async function fetchCredits(refresh: boolean): Promise<CreditsResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/credits${refresh ? "?refresh=true" : ""}`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The owner's data sources: credits left on each server key, a switch for which one this browser analyzes
  * with, Startly's daily cap, and what the chosen source can and can't see.
@@ -37,24 +47,25 @@ export function CreditsStatus({
   const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (refresh: boolean) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/credits${refresh ? "?refresh=true" : ""}`);
-      if (!res.ok) throw new Error(String(res.status));
-      setData(await res.json());
-      setOffline(false);
-    } catch {
-      setOffline(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  function apply(result: CreditsResponse | null) {
+    if (result) setData(result);
+    setOffline(!result);
+  }
 
   // Reload after each analysis (the parent bumps refreshSignal); the backend caches provider answers for a minute.
   useEffect(() => {
-    load(false);
-  }, [load, refreshSignal]);
+    let current = true;
+    fetchCredits(false).then((result) => current && apply(result));
+    return () => {
+      current = false;
+    };
+  }, [refreshSignal]);
+
+  async function refresh() {
+    setLoading(true);
+    apply(await fetchCredits(true));
+    setLoading(false);
+  }
 
   if (offline) {
     return (
@@ -125,7 +136,7 @@ export function CreditsStatus({
         )}
         <button
           type="button"
-          onClick={() => load(true)}
+          onClick={refresh}
           disabled={loading}
           className="rounded p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-50"
           aria-label="Refresh credit balances"

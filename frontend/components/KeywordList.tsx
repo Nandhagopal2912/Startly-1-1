@@ -1,5 +1,6 @@
 "use client";
 
+import type { JSX } from "react";
 import { ChevronDown, Download, FileText, Table2, Trash2, X } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import { type AnalysisRow, type SortKey, clickTier, hasVolume, sortRows } from "../lib/analysis";

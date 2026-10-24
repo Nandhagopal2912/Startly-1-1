@@ -41,8 +41,9 @@ export default function HistoryPage() {
   // Analyses made with the visitor's own key, stored only in this browser.
   const [local, setLocal] = useState<LocalAnalysis[]>([]);
 
+  // Browser storage is read after mounting: the server render can't see it, and must match the first client render.
   useEffect(() => {
-    setLocal(listLocal().reverse());
+    setLocal(listLocal().reverse()); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);

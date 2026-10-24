@@ -95,6 +95,6 @@ cd backend && pytest
 ```
 
 ## 🛠️ Tech Stack
-*   **Frontend**: Next.js, TypeScript, Tailwind CSS, Framer Motion, Chart.js, Lucide.
+*   **Frontend**: Next.js 16 (React 19), TypeScript, Tailwind CSS, Framer Motion, Chart.js, Lucide.
 *   **Backend**: FastAPI (Python 3.10+), Pydantic, Requests, SQLite, ReportLab.
 *   **Data**: SerpApi, Serper or DataForSEO (SERP); user input or DataForSEO (volume).

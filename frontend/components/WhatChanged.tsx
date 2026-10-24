@@ -1,5 +1,6 @@
 "use client";
 
+import type { JSX } from "react";
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, GitCompare, Loader2, Minus, Plus, RefreshCw } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import type { SerpChanges } from "./AnalyzeReport";

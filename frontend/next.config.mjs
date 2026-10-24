@@ -1,4 +1,4 @@
-// The Content Security Policy is set per request in middleware.ts (it needs a fresh nonce).
+// The Content Security Policy is set per request in proxy.ts (it needs a fresh nonce).
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },

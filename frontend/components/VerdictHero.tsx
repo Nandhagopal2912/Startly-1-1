@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Check, CircleHelp, Loader2, Pencil, ThumbsDown, ThumbsUp, TrendingUp, X } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import { type AnalysisRow, hasVolume, rowCountry, volumeLabel } from "../lib/analysis";
@@ -82,7 +82,8 @@ export function VerdictHero({
           </dd>
           <dd className="text-xs text-slate-500">vs a page with only organic links</dd>
         </div>
-        <VolumeField row={row} demo={demo} saving={savingVolume} onSave={onSaveVolume} />
+        {/* Keyed so switching keywords (or a new volume) starts the field fresh. */}
+        <VolumeField key={`${row.keyword}|${row.raw_volume}|${row.volume_source}`} row={row} demo={demo} saving={savingVolume} onSave={onSaveVolume} />
       </dl>
     </section>
   );
@@ -102,12 +103,6 @@ function VolumeField({ row, demo, saving, onSave }: { row: AnalysisRow; demo: bo
   const known = hasVolume(row);
   const [editing, setEditing] = useState(!known);
   const [value, setValue] = useState(known ? String(row.raw_volume) : "");
-
-  // Switching keywords resets the field.
-  useEffect(() => {
-    setEditing(!hasVolume(row));
-    setValue(hasVolume(row) ? String(row.raw_volume) : "");
-  }, [row.keyword, row.raw_volume, row.volume_source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(e: FormEvent) {
     e.preventDefault();
