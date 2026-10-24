@@ -57,12 +57,15 @@ It combines the snapshot, the volume and the click model into the API response:
 *   **Capturable clicks** with their range, and clicks by position (`report.click_model`).
 *   **Click loss %**: clicks removed compared with a plain page with the same organic count.
 *   **Organic share**: organic items ÷ all page-one items. This describes the layout only.
-*   **Narrative sections** for the Intelligence panel: demand, value by position, zero-click risk, commercial intent, model confidence and the verdict.
+*   **Verdict, recommendations and page one** (`insights.py`): what the top positions are worth, next steps from the page's features, and the ranking sites.
+*   **Narrative sections** for the Details panel.
 
 ### 5. Frontend (`frontend/`)
-*   `app/page.tsx`: search with an optional volume box, KPI cards, the multi-keyword comparison, and the session history table.
-*   `components/ClicksByPosition.tsx`: the clicks-by-position chart with its range band, plus the factor list with confidence and source links.
-*   `components/AnalyzeReport.tsx`: shared types and the Intelligence panel.
+*   `app/page.tsx`: the dashboard. Header form (keyword, volume, country), a keyword list on the left, and the selected keyword's detail on the right. It restores recent analyses on load.
+*   `app/history/page.tsx`: searchable list of every saved analysis; clicking one reopens it (`/?open=<id>`).
+*   Detail components, in page order: `VerdictHero` (verdict, clicks, position values, editable volume), `Recommendations`, `PageOne` (who ranks and each position's clicks), `WhatChanged` (re-check and comparison), `DetailsPanel` (full write-up, page items, sources).
+*   `KeywordList` (sort, remove, export) and `BulkAnalysis` (cost preview, ranked results).
+*   `lib/analysis.ts`: shared row type, helpers, API calls and per-browser dashboard settings; `components/AnalyzeReport.tsx`: response types.
 
 ### 6. Export engine (`backend/report_export.py`)
 ReportLab PDF and CSV exports built from the same data as the dashboard, including the click range, clicks by position, and the model's sources.
