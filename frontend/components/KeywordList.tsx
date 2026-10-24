@@ -1,8 +1,11 @@
 "use client";
 
-import { Download, FileText, Trash2, X } from "lucide-react";
+import { ChevronDown, Download, FileText, Table2, Trash2, X } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import { type AnalysisRow, type SortKey, clickTier, hasVolume, sortRows } from "../lib/analysis";
+
+export type ExportFormat = "pdf" | "csv" | "rankings";
+export type ExportScope = "all" | "selected";
 
 const TIER_DOTS: Record<string, string> = {
   Open: "bg-emerald-500",
@@ -27,7 +30,7 @@ export function KeywordList({
   onSelect: (keyword: string) => void;
   onRemove: (keyword: string) => void;
   onClear: () => void;
-  onExport: (format: "csv" | "pdf") => void;
+  onExport: (format: ExportFormat, scope: ExportScope) => void;
 }) {
   const sorted = sortRows(rows, sortKey);
   return (
@@ -98,20 +101,7 @@ export function KeywordList({
       </ul>
 
       <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-3">
-        <button
-          type="button"
-          onClick={() => onExport("csv")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          <FileText size={14} /> CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => onExport("pdf")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          <Download size={14} /> PDF
-        </button>
+        <ExportMenu count={rows.length} selected={selectedKeyword} onExport={onExport} />
         <button
           type="button"
           onClick={onClear}
@@ -122,5 +112,50 @@ export function KeywordList({
         </button>
       </div>
     </div>
+  );
+}
+
+function ExportMenu({
+  count,
+  selected,
+  onExport,
+}: {
+  count: number;
+  selected: string | null;
+  onExport: (format: ExportFormat, scope: ExportScope) => void;
+}) {
+  const options: { format: ExportFormat; scope: ExportScope; icon: JSX.Element; title: string; detail: string }[] = [
+    { format: "pdf", scope: "all", icon: <Download size={15} />, title: `PDF report: all ${count} keywords`, detail: "Ranked summary, then a page per keyword" },
+    ...(selected
+      ? [{ format: "pdf" as const, scope: "selected" as const, icon: <Download size={15} />, title: "PDF report: this keyword", detail: selected }]
+      : []),
+    { format: "csv", scope: "all", icon: <FileText size={15} />, title: "CSV: keywords", detail: "One row per keyword, for spreadsheets" },
+    { format: "rankings", scope: "all", icon: <Table2 size={15} />, title: "CSV: page-one rankings", detail: "Each keyword's ranking sites and their clicks" },
+  ];
+  return (
+    <details className="group relative">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <Download size={14} /> Export <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+        {options.map((o) => (
+          <button
+            key={`${o.format}-${o.scope}`}
+            type="button"
+            onClick={(e) => {
+              (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+              onExport(o.format, o.scope);
+            }}
+            className="flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left hover:bg-slate-50"
+          >
+            <span className="mt-0.5 text-slate-400">{o.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-slate-800">{o.title}</span>
+              <span className="block truncate text-xs text-slate-500">{o.detail}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }

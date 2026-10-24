@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -20,7 +21,7 @@ from security import SecurityMiddleware
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
 from providers.serpapi import account_info
-from report_export import generate_csv_detailed, generate_pdf_detailed
+from report_export import generate_keywords_csv, generate_pdf, generate_rankings_csv
 from stateless import KEY_HEADER, RescoreRequest, analyze_with_own_key, clean_key, rescore
 from usage import calls_today
 
@@ -42,6 +43,8 @@ app.add_middleware(
     allow_origin_regex=config.allowed_origin_regex(),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", KEY_HEADER],
+    # Lets the page read export file names (startly-report-2026-10-24.pdf).
+    expose_headers=["Content-Disposition"],
 )
 
 MAX_REPORT_ROWS = 200
@@ -61,11 +64,21 @@ class DetailedReportRow(BaseModel):
     source: str = ""
     mock_mode: bool = False
     report: dict[str, Any] | None = None
+    capturable_clicks: float | None = None
+    capturable_clicks_low: float | None = None
+    capturable_clicks_high: float | None = None
+    location_name: str | None = Field(None, max_length=100)
+    provider: str | None = Field(None, max_length=30)
+    analyzed_at: str | None = Field(None, max_length=40)
+    changes: dict[str, Any] | None = None
+    rescored: bool = False
+    own_key: bool = False
 
 
 class ReportRequest(BaseModel):
-    rows: list[DetailedReportRow] = Field(..., max_length=MAX_REPORT_ROWS)
-    format: Literal["csv", "pdf"] = "csv"
+    rows: list[DetailedReportRow] = Field(..., min_length=1, max_length=MAX_REPORT_ROWS)
+    # csv = one row per keyword; rankings = one row per keyword and page-one position; pdf = report.
+    format: Literal["csv", "rankings", "pdf"] = "csv"
 
 
 @app.get("/health")
@@ -176,15 +189,15 @@ def history_item(analysis_id: int) -> dict[str, Any]:
 
 @app.post("/report")
 def report(request: ReportRequest) -> Response:
-    rows_payload = [r.model_dump() for r in request.rows]
-    if request.format == "csv":
-        content = generate_csv_detailed(rows_payload)
-        headers = {"Content-Disposition": "attachment; filename=traffic-opportunity-report.csv"}
-        return Response(content=content, media_type="text/csv", headers=headers)
-
-    content = generate_pdf_detailed(rows_payload)
-    headers = {"Content-Disposition": "attachment; filename=traffic-opportunity-report.pdf"}
-    return Response(content=content, media_type="application/pdf", headers=headers)
+    rows = [r.model_dump() for r in request.rows]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if request.format == "pdf":
+        content, media, name = generate_pdf(rows), "application/pdf", f"startly-report-{stamp}.pdf"
+    elif request.format == "rankings":
+        content, media, name = generate_rankings_csv(rows), "text/csv; charset=utf-8", f"startly-page-one-{stamp}.csv"
+    else:
+        content, media, name = generate_keywords_csv(rows), "text/csv; charset=utf-8", f"startly-keywords-{stamp}.csv"
+    return Response(content=content, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 if __name__ == "__main__":

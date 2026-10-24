@@ -8,7 +8,7 @@ import { cn } from "../lib/utils";
 import { BulkAnalysis } from "../components/BulkAnalysis";
 import { DetailsPanel } from "../components/DetailsPanel";
 import { KeyDialog, type KeyInfo } from "../components/KeyDialog";
-import { KeywordList } from "../components/KeywordList";
+import { type ExportFormat, type ExportScope, KeywordList } from "../components/KeywordList";
 import { PageOne } from "../components/PageOne";
 import { Recommendations } from "../components/Recommendations";
 import { VerdictHero } from "../components/VerdictHero";
@@ -50,6 +50,9 @@ import {
 type Usage = { serp_provider: string; serp_configured: boolean; calls_today: number; daily_cap: number; demo_mode?: boolean };
 
 const README_URL = "https://github.com/Nandhagopal2912/Startly-1-1#readme";
+
+// File-name-safe version of a keyword: "what is a roth ira" -> "what-is-a-roth-ira".
+const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "keyword";
 
 const sameKeyword = (a: AnalysisRow, b: AnalysisRow) => a.keyword.toLowerCase() === b.keyword.toLowerCase();
 
@@ -374,8 +377,9 @@ export default function HomePage() {
     setSelectedKeyword(newRows[0].keyword);
   }
 
-  async function onExport(format: "csv" | "pdf") {
-    if (!rows.length) return;
+  async function onExport(format: ExportFormat, scope: ExportScope) {
+    const chosen = scope === "selected" && selectedRow ? [selectedRow] : rows;
+    if (!chosen.length) return;
     setError("");
     try {
       const res = await fetch(`${API_BASE}/report`, {
@@ -383,26 +387,37 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           format,
-          rows: rows.map((r) => ({
+          // Everything the exports show; the browser-only fields (key, saved results page) stay here.
+          rows: chosen.map((r) => ({
             keyword: r.keyword,
             raw_volume: r.raw_volume,
             volume_source: r.volume_source ?? "",
             adjusted_volume: r.adjusted_volume,
+            capturable_clicks: r.capturable_clicks ?? null,
+            capturable_clicks_low: r.capturable_clicks_low ?? null,
+            capturable_clicks_high: r.capturable_clicks_high ?? null,
             saturation_score: r.saturation_score,
             organic_results: r.organic_results,
             total_results: r.total_results,
             penalty_applied: r.penalty_applied,
             source: r.source,
             mock_mode: r.mock_mode,
+            location_name: rowCountry(r),
+            provider: r.provider ?? null,
+            analyzed_at: r.analyzed_at ?? null,
+            changes: r.changes ?? null,
+            rescored: Boolean(r.rescored),
+            own_key: Boolean(r.own_key),
             report: r.report ?? null,
           })),
         }),
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? `startly-export.${format === "pdf" ? "pdf" : "csv"}`;
       const url = window.URL.createObjectURL(await res.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = `startly-keywords.${format}`;
+      link.download = scope === "selected" ? name.replace("startly-report", `startly-${slug(chosen[0].keyword)}`) : name;
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {

@@ -1,394 +1,370 @@
-"""CSV/PDF export matching the analysis UI: KPIs, charts, narrative sections."""
+"""CSV and PDF exports of dashboard analyses.
+
+CSV: one tidy table per file (keywords, or page-one rankings), safe to open in Excel.
+PDF: a ranked summary page, then one page per keyword in the same order as the dashboard.
+"""
 
 from __future__ import annotations
 
 import csv
 import io
+from datetime import datetime, timezone
 from typing import Any
+from xml.sax.saxutils import escape
 
-from reportlab.graphics import renderPDF
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+# A4 width minus the 18 mm margins on each side.
+CONTENT_WIDTH = 174 * mm
+
+METHODOLOGY_URL = "https://github.com/Nandhagopal2912/Startly-1-1/blob/main/METHODOLOGY.md"
+
+VOLUME_LABELS = {"user": "Entered by user", "dataforseo": "DataForSEO", "mock": "Mock data", "api": "API", "unknown": "Unknown"}
+VERDICT_COLORS = {"good": "#047857", "neutral": "#b45309", "bad": "#be123c", "unknown": "#475569"}
+
+# Excel and Sheets run cells that start with these as formulas, so a keyword like "=HYPERLINK(...)" could execute.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
-def _blank_if_none(value: Any) -> Any:
-    return "" if value is None else value
+# --- shared helpers ---
+
+def _report(row: dict[str, Any]) -> dict[str, Any]:
+    return row.get("report") or {}
 
 
-def generate_csv_detailed(rows: list[dict[str, Any]]) -> bytes:
-    output = io.StringIO()
-    writer = csv.writer(output)
+def _summary(row: dict[str, Any]) -> dict[str, Any]:
+    return _report(row).get("summary") or {}
 
-    writer.writerow(["Traffic Opportunity — Full Export"])
-    writer.writerow([])
-    writer.writerow(
-        [
-            "SUMMARY (same KPIs as analysis page cards)",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
+
+def _has_volume(row: dict[str, Any]) -> bool:
+    return (row.get("volume_source") or "") not in ("unknown", "")
+
+
+def _clicks(row: dict[str, Any]) -> tuple[Any, Any, Any]:
+    s = _summary(row)
+    mid = row.get("capturable_clicks", s.get("capturable_clicks"))
+    low = row.get("capturable_clicks_low", s.get("capturable_clicks_low"))
+    high = row.get("capturable_clicks_high", s.get("capturable_clicks_high"))
+    if not _has_volume(row):
+        return None, None, None
+    return mid, low, high
+
+
+def _features(row: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """(features that reduce clicks, other features present), as readable labels."""
+    model = _report(row).get("click_model") or {}
+    costly = [f"{f['label']} ({f['position_1_effect_percent']}% at #1)" for f in model.get("factors") or []]
+    neutral = [t.replace("_", " ").capitalize() for t in model.get("neutral_features") or []]
+    return costly, neutral
+
+
+def ranked(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Dashboard order: most capturable clicks first, then keywords without volume by organic click-through."""
+    def key(row):
+        mid, _, _ = _clicks(row)
+        if mid is not None:
+            return (0, -float(mid))
+        return (1, -float(_summary(row).get("organic_ctr_total") or 0))
+    return sorted(rows, key=key)
+
+
+def _when(iso: str | None) -> str:
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d %b %Y")
+    except ValueError:
+        return iso
+
+
+def _cell(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)  # 12000, not 12000.0
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def _csv(header: list[str], rows: list[list[Any]]) -> bytes:
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(header)
+    writer.writerows([[_cell(v) for v in r] for r in rows])
+    # The BOM makes Excel read the file as UTF-8 (keywords and dashes stay intact).
+    return ("﻿" + out.getvalue()).encode("utf-8")
+
+
+# --- CSV ---
+
+KEYWORD_COLUMNS = [
+    "Rank", "Keyword", "Country", "Verdict", "Capturable clicks / month", "Clicks (low)", "Clicks (high)",
+    "#1 ranking clicks / month", "Top 3 clicks / month", "Monthly searches", "Volume source",
+    "Clicks lost to SERP features (%)", "Organic click-through (% of searches)", "Organic results on page one",
+    "Features that reduce clicks", "Other features on page one", "Top 3 ranking sites", "First recommendation",
+    "Analyzed", "Data source", "Notes",
+]
+
+
+def generate_keywords_csv(rows: list[dict[str, Any]]) -> bytes:
+    """One row per keyword, ranked like the dashboard."""
+    out = []
+    for rank, row in enumerate(ranked(rows), start=1):
+        rep, s = _report(row), _summary(row)
+        verdict = rep.get("verdict") or {}
+        mid, low, high = _clicks(row)
+        costly, neutral = _features(row)
+        sites = [p.get("domain") for p in (rep.get("page_one") or [])[:3] if p.get("domain")]
+        recs = rep.get("recommendations") or []
+        notes = [n for n in (
+            "Mock data" if row.get("mock_mode") else "",
+            "Recalculated with the current click model" if row.get("rescored") else "",
+            "Your own key" if row.get("own_key") else "",
+        ) if n]
+        out.append([
+            rank, row.get("keyword", ""), row.get("location_name") or "United States", verdict.get("label", ""),
+            mid, low, high, verdict.get("top1_clicks"), verdict.get("top3_clicks"),
+            row.get("raw_volume") if _has_volume(row) else None,
+            VOLUME_LABELS.get(row.get("volume_source") or "unknown", row.get("volume_source")),
+            s.get("penalty_percent"), s.get("organic_ctr_total"), row.get("organic_results", s.get("organic_results")),
+            "; ".join(costly), "; ".join(neutral), "; ".join(sites), recs[0]["title"] if recs else "",
+            (row.get("analyzed_at") or "")[:10], row.get("provider", ""), "; ".join(notes),
+        ])
+    return _csv(KEYWORD_COLUMNS, out)
+
+
+RANKING_COLUMNS = [
+    "Keyword", "Country", "Position", "Site", "Clicks / month", "Clicks (low)", "Clicks (high)",
+    "Share of searches (%)", "Analyzed",
+]
+
+
+def generate_rankings_csv(rows: list[dict[str, Any]]) -> bytes:
+    """One row per keyword and organic position: who ranks and what that position is worth."""
+    out = []
+    for row in ranked(rows):
+        rep = _report(row)
+        positions = rep.get("page_one") or [
+            {**p, "domain": None} for p in (rep.get("click_model") or {}).get("positions") or []
         ]
-    )
-    writer.writerow(
-        [
-            "Keyword",
-            "Raw volume",
-            "Volume source",
-            "Capturable clicks",
-            "Clicks (low)",
-            "Clicks (high)",
-            "Organic CTR % (page one)",
-            "Saturation score (0–1)",
-            "Saturation %",
-            "Organic results",
-            "Non-organic count",
-            "Total SERP items",
-            "Features reduce clicks",
-            "Click loss % (vs plain page)",
-            "Click retention factor",
-            "Volume minus clicks",
-            "Clicks / organic slot",
-            "Saturation label",
-            "Source",
-            "Mock mode",
-        ]
-    )
-
-    for row in rows:
-        rep = row.get("report") or {}
-        summary = rep.get("summary") or {}
-        writer.writerow(
-            [
-                row.get("keyword", summary.get("keyword", "")),
-                summary.get("raw_volume", row.get("raw_volume", "")),
-                row.get("volume_source", ""),
-                _blank_if_none(summary.get("capturable_clicks", row.get("adjusted_volume", ""))),
-                _blank_if_none(summary.get("capturable_clicks_low")),
-                _blank_if_none(summary.get("capturable_clicks_high")),
-                summary.get("organic_ctr_total", ""),
-                summary.get("saturation_score", row.get("saturation_score", "")),
-                summary.get("saturation_percent", ""),
-                summary.get("organic_results", row.get("organic_results", "")),
-                summary.get("non_organic_count", ""),
-                summary.get("total_results", row.get("total_results", "")),
-                summary.get("penalty_applied", row.get("penalty_applied", "")),
-                summary.get("penalty_percent", ""),
-                summary.get("penalty_factor", ""),
-                summary.get("volume_reduction", ""),
-                summary.get("demand_per_organic_slot", ""),
-                summary.get("saturation_label", ""),
-                row.get("source", ""),
-                row.get("mock_mode", ""),
-            ]
-        )
-
-    writer.writerow([])
-    writer.writerow(["CLICKS BY POSITION (click model estimate)"])
-    writer.writerow(["Keyword", "Position", "CTR %", "CTR % (low)", "CTR % (high)", "Clicks", "Clicks (low)", "Clicks (high)"])
-    for row in rows:
-        rep = row.get("report") or {}
-        kw = row.get("keyword", (rep.get("summary") or {}).get("keyword", ""))
-        for p in (rep.get("click_model") or {}).get("positions") or []:
-            writer.writerow([
-                kw, p.get("position"), p.get("ctr"), p.get("ctr_low"), p.get("ctr_high"),
-                _blank_if_none(p.get("clicks")), _blank_if_none(p.get("clicks_low")), _blank_if_none(p.get("clicks_high")),
+        known = _has_volume(row)
+        for p in positions:
+            out.append([
+                row.get("keyword", ""), row.get("location_name") or "United States", p.get("position"), p.get("domain") or "",
+                p.get("clicks") if known else None, p.get("clicks_low") if known else None,
+                p.get("clicks_high") if known else None, p.get("ctr"), (row.get("analyzed_at") or "")[:10],
             ])
+    return _csv(RANKING_COLUMNS, out)
 
-    writer.writerow([])
-    writer.writerow(["CLICK MODEL FACTORS (sources)"])
-    writer.writerow(["Keyword", "Feature", "Effect at #1 (%)", "Confidence", "Source", "URL"])
-    for row in rows:
-        rep = row.get("report") or {}
-        kw = row.get("keyword", (rep.get("summary") or {}).get("keyword", ""))
-        for f in (rep.get("click_model") or {}).get("factors") or []:
-            writer.writerow([kw, f.get("label"), f.get("position_1_effect_percent"), f.get("confidence"), f.get("source"), f.get("url")])
 
-    writer.writerow([])
-    writer.writerow(["SERP TYPE BREAKDOWN (chart data — counts per type)"])
-    writer.writerow(["Keyword", "SERP type", "Count"])
-    for row in rows:
-        rep = row.get("report") or {}
-        summary = rep.get("summary") or {}
-        kw = row.get("keyword", summary.get("keyword", ""))
-        breakdown = summary.get("type_breakdown") or {}
-        if isinstance(breakdown, dict) and breakdown:
-            for t, c in sorted(breakdown.items(), key=lambda x: (-x[1], x[0])):
-                writer.writerow([kw, t, c])
+# --- PDF ---
+
+def _pdf_text(text: Any) -> str:
+    """Escape for ReportLab markup and replace characters the built-in Helvetica can't draw."""
+    s = str(text if text is not None else "")
+    for bad, good in (("→", "to"), ("≈", "~"), ("−", "-"), ("‑", "-"), (" ", " ")):
+        s = s.replace(bad, good)
+    return escape(s)
+
+
+def _num(value: Any, suffix: str = "") -> str:
+    if value is None or value == "":
+        return "-"
+    return f"{float(value):,.0f}{suffix}"
+
+
+def _styles() -> dict[str, ParagraphStyle]:
+    base = getSampleStyleSheet()
+    ink, muted = colors.HexColor("#0f172a"), colors.HexColor("#64748b")
+    return {
+        "title": ParagraphStyle("title", parent=base["Title"], fontSize=20, leading=24, alignment=TA_LEFT, textColor=ink, spaceAfter=2),
+        "h1": ParagraphStyle("h1", parent=base["Heading1"], fontSize=17, leading=21, textColor=ink, spaceAfter=2),
+        "h2": ParagraphStyle("h2", parent=base["Heading2"], fontSize=11.5, leading=14, textColor=ink, spaceBefore=10, spaceAfter=4),
+        "body": ParagraphStyle("body", parent=base["BodyText"], fontSize=9.5, leading=13, textColor=colors.HexColor("#334155")),
+        "muted": ParagraphStyle("muted", parent=base["BodyText"], fontSize=8.5, leading=11, textColor=muted),
+        "small": ParagraphStyle("small", parent=base["BodyText"], fontSize=7.5, leading=10, textColor=muted),
+        "cell": ParagraphStyle("cell", parent=base["BodyText"], fontSize=8.5, leading=10.5, textColor=ink),
+        "cell_head": ParagraphStyle("cell_head", parent=base["BodyText"], fontSize=7.5, leading=9, textColor=muted),
+        "big": ParagraphStyle("big", parent=base["BodyText"], fontSize=16, leading=19, textColor=ink, fontName="Helvetica-Bold"),
+    }
+
+
+_GRID = TableStyle([
+    ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#cbd5e1")),
+    ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+    ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+])
+
+
+def _verdict_markup(verdict: dict[str, Any]) -> str:
+    color = VERDICT_COLORS.get(verdict.get("tone", "unknown"), "#475569")
+    return f'<font color="{color}"><b>{_pdf_text(verdict.get("label", "-"))}</b></font>'
+
+
+def _summary_page(rows: list[dict[str, Any]], st: dict[str, ParagraphStyle], generated: str) -> list[Any]:
+    countries = sorted({r.get("location_name") or "United States" for r in rows})
+    flow: list[Any] = [
+        Paragraph("Keyword opportunity report", st["title"]),
+        Paragraph(_pdf_text(f"{len(rows)} keyword{'s' if len(rows) != 1 else ''} · {', '.join(countries)} · generated {generated}"), st["muted"]),
+        Spacer(1, 6),
+        Paragraph(
+            "<b>Capturable clicks</b> are the monthly searches expected to click an organic result on page one, after "
+            "AI Overviews, ads and maps take their share. Keywords are ranked by them; the range shows uncertainty "
+            "where several features overlap.", st["body"]),
+        Spacer(1, 10),
+    ]
+    head = ["#", "Keyword", "Verdict", "Clicks / month", "#1 worth", "Clicks lost", "Searches"]
+    data = [[Paragraph(h, st["cell_head"]) for h in head]]
+    for i, row in enumerate(rows, start=1):
+        verdict = _report(row).get("verdict") or {}
+        mid, low, high = _clicks(row)
+        clicks = _num(mid) + (f"<br/><font size=7 color='#64748b'>{_num(low)}-{_num(high)}</font>" if mid is not None and low != high else "")
+        data.append([
+            Paragraph(str(i), st["cell"]),
+            Paragraph(f"<b>{_pdf_text(row.get('keyword', ''))}</b>", st["cell"]),
+            Paragraph(_verdict_markup(verdict), st["cell"]),
+            Paragraph(clicks, st["cell"]),
+            Paragraph(_num(verdict.get("top1_clicks")), st["cell"]),
+            Paragraph(f"{_summary(row).get('penalty_percent', 0)}%", st["cell"]),
+            Paragraph(_num(row.get("raw_volume")) if _has_volume(row) else "-", st["cell"]),
+        ])
+    table = Table(data, colWidths=[8 * mm, 54 * mm, 34 * mm, 24 * mm, 18 * mm, 18 * mm, 18 * mm], repeatRows=1)
+    table.setStyle(_GRID)
+    flow.append(table)
+    if any(not _has_volume(r) for r in rows):
+        flow += [Spacer(1, 6), Paragraph("Keywords without a monthly search volume show click-through only and are listed last.", st["small"])]
+    return flow
+
+
+def _keyword_page(row: dict[str, Any], st: dict[str, ParagraphStyle]) -> list[Any]:
+    rep, s = _report(row), _summary(row)
+    verdict = rep.get("verdict") or {}
+    mid, low, high = _clicks(row)
+    meta = [row.get("location_name") or "United States"]
+    if row.get("analyzed_at"):
+        meta.append(f"analyzed {_when(row.get('analyzed_at'))}")
+    if row.get("provider"):
+        meta.append(f"data: {row['provider']}")
+    if row.get("mock_mode"):
+        meta.append("mock data")
+    flow: list[Any] = [
+        Paragraph(_pdf_text(row.get("keyword", "")), st["h1"]),
+        Paragraph(_pdf_text(" · ".join(meta)), st["muted"]),
+        Spacer(1, 6),
+        Paragraph(f"{_verdict_markup(verdict)} &nbsp; {_pdf_text(verdict.get('reason', ''))}", st["body"]),
+    ]
+    if row.get("rescored"):
+        flow.append(Paragraph("Older analysis: numbers recalculated with the current click model.", st["small"]))
+
+    clicks_text = _num(mid) if mid is not None else f"{s.get('organic_ctr_total', 0)}%"
+    clicks_note = (f"range {_num(low)}-{_num(high)}" if mid is not None and low != high
+                   else "of searches click organic" if mid is None else "organic, page one")
+    stats = [
+        ("Capturable clicks / month", clicks_text, clicks_note),
+        ("#1 ranking worth", _num(verdict.get("top1_clicks")), "clicks / month"),
+        ("Top 3 combined", _num(verdict.get("top3_clicks")), "clicks / month"),
+        ("Clicks lost to SERP features", f"{s.get('penalty_percent', 0)}%", "vs a page of only organic links"),
+        ("Monthly searches", _num(row.get("raw_volume")) if _has_volume(row) else "-",
+         VOLUME_LABELS.get(row.get("volume_source") or "unknown", "")),
+    ]
+    stat_table = Table(
+        [[Paragraph(_pdf_text(label), st["cell_head"]) for label, _, _ in stats],
+         [Paragraph(_pdf_text(value), st["big"]) for _, value, _ in stats],
+         [Paragraph(_pdf_text(note), st["small"]) for _, _, note in stats]],
+        colWidths=[CONTENT_WIDTH / 5] * 5,
+    )
+    stat_table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    flow += [Spacer(1, 8), stat_table]
+
+    recs = rep.get("recommendations")
+    if recs is not None:
+        flow.append(Paragraph("What to do", st["h2"]))
+        if recs:
+            for rec in recs:
+                flow.append(Paragraph(f"<b>{_pdf_text(rec['title'])}.</b> {_pdf_text(rec['detail'])}", st["body"], bulletText="•"))
         else:
-            writer.writerow([kw, "(no breakdown)", ""])
+            flow.append(Paragraph("A plain results page: nothing special to plan around. Focus on ranking well.", st["body"]))
 
-    writer.writerow([])
-    writer.writerow(["DETAILED SECTIONS (same text as analysis page)"])
-    writer.writerow(["Keyword", "Section title", "Body"])
-    for row in rows:
-        rep = row.get("report") or {}
-        summary = rep.get("summary") or {}
-        kw = row.get("keyword", summary.get("keyword", ""))
-        for sec in rep.get("sections") or []:
-            if isinstance(sec, dict):
-                writer.writerow([kw, sec.get("title", ""), sec.get("body", "")])
+    positions = rep.get("page_one") or [{**p, "domain": None} for p in (rep.get("click_model") or {}).get("positions") or []]
+    page_one: list[Any] = [Paragraph("Page one", st["h2"])]
+    costly, neutral = _features(row)
+    if costly or neutral:
+        parts = ([f"<b>Reduce clicks:</b> {_pdf_text('; '.join(costly))}"] if costly else []) + \
+                ([f"<b>Also present:</b> {_pdf_text(', '.join(neutral))}"] if neutral else [])
+        page_one.append(Paragraph(" &nbsp; ".join(parts), st["muted"]))
+        page_one.append(Spacer(1, 4))
+    if positions:
+        known = _has_volume(row)
+        head = ["#", "Site", "Clicks / month" if known else "Share of searches"]
+        data = [[Paragraph(h, st["cell_head"]) for h in head]]
+        for p in positions:
+            value = (_num(p.get("clicks")) + ("*" if p.get("clicks_low") != p.get("clicks_high") else "")) if known else f"{p.get('ctr') or 0:.1f}%"
+            data.append([Paragraph(str(p.get("position")), st["cell"]),
+                         Paragraph(_pdf_text(p.get("domain") or f"Position {p.get('position')}"), st["cell"]),
+                         Paragraph(value, st["cell"])])
+        table = Table(data, colWidths=[10 * mm, CONTENT_WIDTH - 50 * mm, 40 * mm])
+        table.setStyle(_GRID)
+        page_one.append(table)
+        if known and any(p.get("clicks_low") != p.get("clicks_high") for p in positions):
+            page_one.append(Paragraph("* Middle of a range: several features overlap at this position.", st["small"]))
+    else:
+        page_one.append(Paragraph("No organic results on page one.", st["body"]))
+    flow.append(KeepTogether(page_one))
 
-    writer.writerow([])
-    writer.writerow(["COMPARE KEYWORDS CHART (raw vs adjusted vs organic slots)"])
-    writer.writerow(["Keyword", "Raw volume", "Adjusted volume", "Organic slots (supply)"])
-    for row in rows:
-        rep = row.get("report") or {}
-        summary = rep.get("summary") or {}
-        writer.writerow(
-            [
-                row.get("keyword", summary.get("keyword", "")),
-                summary.get("raw_volume", row.get("raw_volume", "")),
-                summary.get("adjusted_volume", row.get("adjusted_volume", "")),
-                summary.get("organic_results", row.get("organic_results", "")),
-            ]
-        )
+    changes = row.get("changes") or {}
+    if changes.get("has_previous") and changes.get("has_changes"):
+        flow.append(Paragraph(f"What changed since {_pdf_text(_when(changes.get('previous_fetched_at')))}", st["h2"]))
+        for line in changes.get("summary") or []:
+            flow.append(Paragraph(_pdf_text(line), st["body"], bulletText="•"))
 
-    return output.getvalue().encode("utf-8")
-
-
-def _drawing_raw_vs_adjusted(raw: float, adj: float) -> Drawing:
-    d = Drawing(280, 160)
-    bc = VerticalBarChart()
-    bc.x = 40
-    bc.y = 35
-    bc.height = 90
-    bc.width = 200
-    bc.data = [[float(raw), float(adj)]]
-    bc.categoryAxis.categoryNames = ["Raw volume", "Adjusted"]
-    bc.categoryAxis.labels.angle = 0
-    bc.categoryAxis.labels.fontSize = 8
-    bc.valueAxis.valueMin = 0
-    bc.valueAxis.labels.fontSize = 8
-    bc.bars[0].fillColor = colors.HexColor("#3b82f6")
-    d.add(bc)
-    return d
+    model = rep.get("click_model") or {}
+    sources = [f"{f['label']}: {f['confidence']} confidence ({f['source']})" for f in model.get("factors") or []]
+    baseline = (model.get("baseline_source") or {}).get("name")
+    note = "How this was estimated: " + ("; ".join(sources) + ". " if sources else "") + \
+           (f"Baseline click rates: {baseline}. " if baseline else "") + f"Full methodology: {METHODOLOGY_URL}"
+    flow += [Spacer(1, 10), Paragraph(_pdf_text(note), st["small"])]
+    return flow
 
 
-def _drawing_organic_split(organic: int, other: int) -> Drawing:
-    d = Drawing(200, 140)
-    pc = Pie()
-    pc.x = 45
-    pc.y = 15
-    pc.width = 90
-    pc.height = 90
-    pc.data = [organic, other]
-    pc.labels = ["Organic", "Other"]
-    pc.slices.strokeWidth = 0.25
-    d.add(pc)
-    return d
+def generate_pdf(rows: list[dict[str, Any]]) -> bytes:
+    st = _styles()
+    generated = datetime.now(timezone.utc).strftime("%d %b %Y")
+    order = ranked(rows)
+    flow: list[Any] = []
+    if len(order) > 1:
+        flow += _summary_page(order, st, generated)
+    for i, row in enumerate(order):
+        if flow:
+            flow.append(PageBreak())
+        flow += _keyword_page(row, st)
 
+    def footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(colors.HexColor("#94a3b8"))
+        canvas.drawString(18 * mm, 10 * mm, f"Startly Analyze · generated {generated}")
+        canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"Page {doc.page}")
+        canvas.restoreState()
 
-def _drawing_type_pie(breakdown: dict[str, int]) -> Drawing | None:
-    if not breakdown:
-        return None
-    items = sorted(breakdown.items(), key=lambda x: -x[1])
-    labels = [k[:18] + ("…" if len(k) > 18 else "") for k, _ in items]
-    data = [float(v) for _, v in items]
-    d = Drawing(260, 150)
-    pc = Pie()
-    pc.x = 10
-    pc.y = 10
-    pc.width = 100
-    pc.height = 100
-    pc.data = data
-    pc.labels = labels
-    pc.slices.strokeWidth = 0.25
-    d.add(pc)
-    return d
-
-
-def generate_pdf_detailed(rows: list[dict[str, Any]]) -> bytes:
     buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-    left = 40
-    content_w = width - 2 * left
-
-    for idx, row in enumerate(rows):
-        if idx > 0:
-            p.showPage()
-
-        rep = row.get("report") or {}
-        summary = rep.get("summary") or {}
-        kw = str(row.get("keyword", summary.get("keyword", "—")))
-
-        y = height - 48
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(left, y, "Traffic Opportunity Report")
-        y -= 22
-        p.setFont("Helvetica", 10)
-        p.drawString(left, y, f"Keyword: {kw}")
-        y -= 14
-        src = row.get("source", "")
-        mock = row.get("mock_mode", False)
-        p.drawString(left, y, f"Source: {src}  ·  {'Mock data' if mock else 'Live API'}")
-        y -= 14
-        p.drawString(left, y, f"Volume source: {row.get('volume_source') or 'not recorded'}")
-        y -= 28
-
-        if not summary:
-            p.setFont("Helvetica", 10)
-            p.drawString(
-                left,
-                y,
-                f"Raw: {row.get('raw_volume')}  Adjusted: {row.get('adjusted_volume')}  Saturation: {row.get('saturation_score')}",
-            )
-            continue
-
-        raw_v = float(summary.get("raw_volume", 0))
-        adj_v = float(summary.get("adjusted_volume", 0))
-        org = int(summary.get("organic_results", 0))
-        non_org = int(summary.get("non_organic_count", 0))
-        total = int(summary.get("total_results", 0))
-
-        p.setFont("Helvetica-Bold", 11)
-        p.drawString(left, y, "KPI summary (same as analysis cards)")
-        y -= 16
-
-        card_w = (content_w - 24) / 4
-        card_h = 52
-        clicks = summary.get("capturable_clicks")
-        lo, hi = summary.get("capturable_clicks_low"), summary.get("capturable_clicks_high")
-        if clicks is None:
-            clicks_text = f"{summary.get('organic_ctr_total', 0)}% of searches"
-        elif lo is not None and hi is not None and lo != hi:
-            clicks_text = f"{clicks:,.0f} ({lo:,.0f}-{hi:,.0f})"
-        else:
-            clicks_text = f"{clicks:,.0f}"
-        cards = [
-            ("Raw monthly volume", f"{raw_v:,.0f}" if row.get("volume_source") != "unknown" else "—"),
-            ("Capturable organic clicks", clicks_text),
-            (
-                "Saturation score",
-                f"{float(summary.get('saturation_percent', 0)):.1f}% ({org}/{total} organic)",
-            ),
-            (
-                "Clicks / organic slot",
-                f"{summary.get('demand_per_organic_slot') if summary.get('demand_per_organic_slot') is not None else '—'}",
-            ),
-        ]
-        cx = left
-        for title, val in cards:
-            p.setStrokeColorRGB(0.85, 0.88, 0.92)
-            p.setFillColorRGB(0.97, 0.98, 0.99)
-            p.roundRect(cx, y - card_h, card_w, card_h, 4, stroke=1, fill=1)
-            p.setFillColorRGB(0.2, 0.2, 0.22)
-            p.setFont("Helvetica", 7)
-            p.drawString(cx + 6, y - 14, title[:42])
-            p.setFont("Helvetica-Bold", 11)
-            p.drawString(cx + 6, y - 34, str(val)[:36])
-            cx += card_w + 8
-        y -= card_h + 18
-
-        p.setFont("Helvetica-Bold", 11)
-        p.drawString(left, y, "Charts (same data as analysis page)")
-        y -= 16
-
-        chart_titles_y = y
-        p.setFont("Helvetica", 8)
-        p.drawString(left, chart_titles_y, "Search volume vs capturable clicks")
-        p.drawString(left + 300, chart_titles_y, "Organic vs non-organic (items)")
-        d1 = _drawing_raw_vs_adjusted(raw_v, adj_v)
-        d2 = _drawing_organic_split(org, non_org)
-        h1 = 160
-        h2 = 140
-        renderPDF.draw(d1, p, left, chart_titles_y - h1)
-        renderPDF.draw(d2, p, left + 280, chart_titles_y - h2)
-        y = chart_titles_y - max(h1, h2) - 12
-
-        d3 = _drawing_type_pie(summary.get("type_breakdown") or {})
-        if d3:
-            p.setFont("Helvetica", 8)
-            p.drawString(left, y, "SERP types (full breakdown)")
-            y -= 12
-            renderPDF.draw(d3, p, left, y - 150)
-            y -= 160
-        else:
-            y -= 4
-
-        p.setFont("Helvetica-Bold", 11)
-        p.drawString(left, y, "Quick numbers")
-        y -= 14
-        p.setFont("Helvetica", 9)
-        penalty_line = (
-            f"Penalty: {summary.get('penalty_percent', 0)}%  ·  Factor: {summary.get('penalty_factor', 1)}  ·  "
-            f"Volume reduction: {summary.get('volume_reduction', 0)}"
-        )
-        for line in [
-            penalty_line,
-            f"Non-organic types: {', '.join(summary.get('non_organic_types') or []) or '—'}",
-            f"Saturation label: {summary.get('saturation_label', '')}",
-        ]:
-            p.drawString(left, y, line[:120])
-            y -= 12
-        y -= 8
-
-        if y < 120:
-            p.showPage()
-            y = height - 48
-
-        p.setFont("Helvetica-Bold", 11)
-        p.drawString(left, y, "Detailed explanation")
-        y -= 14
-        p.setFont("Helvetica", 9)
-        for sec in rep.get("sections") or []:
-            if not isinstance(sec, dict):
-                continue
-            title = str(sec.get("title", ""))
-            body = str(sec.get("body", ""))
-            if y < 80:
-                p.showPage()
-                y = height - 48
-                p.setFont("Helvetica-Bold", 11)
-                p.drawString(left, y, "Detailed explanation (continued)")
-                y -= 16
-                p.setFont("Helvetica", 9)
-            p.setFont("Helvetica-Bold", 9)
-            p.drawString(left, y, title)
-            y -= 11
-            p.setFont("Helvetica", 9)
-            for para in _wrap_text(body, int(content_w / 4.5)):
-                if y < 52:
-                    p.showPage()
-                    y = height - 48
-                    p.setFont("Helvetica", 9)
-                p.drawString(left, y, para)
-                y -= 11
-            y -= 6
-
-    p.save()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
+        title="Keyword opportunity report", author="Startly Analyze",
+    )
+    doc.build(flow, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
-
-
-def _wrap_text(text: str, max_chars: int) -> list[str]:
-    words = text.split()
-    lines: list[str] = []
-    cur: list[str] = []
-    length = 0
-    for w in words:
-        add = len(w) + (1 if cur else 0)
-        if length + add > max_chars and cur:
-            lines.append(" ".join(cur))
-            cur = [w]
-            length = len(w)
-        else:
-            cur.append(w)
-            length += add
-    if cur:
-        lines.append(" ".join(cur))
-    return lines if lines else [""]

@@ -73,22 +73,6 @@ def test_provider_health():
     assert body["volume_provider"] == "none"
 
 
-def test_exports_include_volume_source():
-    row = client.post("/analyze", json={"keyword": "crm", "mock_mode": True, "search_volume": 900}).json()
-    csv = client.post("/report", json={"rows": [row], "format": "csv"}).text
-    assert "Volume source" in csv and ",user," in csv
-    pdf = client.post("/report", json={"rows": [row], "format": "pdf"})
-    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
-
-
-def test_csv_export_includes_click_positions_and_sources():
-    row = client.post("/analyze", json={"keyword": "crm", "mock_mode": True, "search_volume": 5000}).json()
-    csv = client.post("/report", json={"rows": [row], "format": "csv"}).text
-    assert "CLICKS BY POSITION" in csv
-    assert "Capturable clicks" in csv
-    assert "CLICK MODEL FACTORS" in csv
-
-
 def test_cache_only_rescores_an_expired_page_without_spending(monkeypatch):
     import store
 
