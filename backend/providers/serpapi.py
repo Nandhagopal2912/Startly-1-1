@@ -76,14 +76,18 @@ class SerpApiProvider:
     def is_configured(self) -> bool:
         return env_clean("SERPAPI_API_KEY") is not None
 
-    def fetch_serp(self, keyword: str, location_name: str, language_name: str) -> dict[str, Any]:
-        api_key = env_clean("SERPAPI_API_KEY")
-        if not api_key:
-            raise HTTPException(
-                status_code=503,
-                detail="SerpApi is not configured. Set SERPAPI_API_KEY in backend/.env (free key at serpapi.com).",
-            )
-        record_call(self.name, "search", keyword)
+    def fetch_serp(
+        self, keyword: str, location_name: str, language_name: str, api_key: str | None = None
+    ) -> dict[str, Any]:
+        """Search with the server's key, or with a visitor's own `api_key` (their quota, so not counted here)."""
+        if api_key is None:
+            api_key = env_clean("SERPAPI_API_KEY")
+            if not api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="SerpApi is not configured. Set SERPAPI_API_KEY in backend/.env (free key at serpapi.com).",
+                )
+            record_call(self.name, "search", keyword)
         country = COUNTRY_CODES.get(location_name.strip().lower(), "us")
         params = {
             "engine": "google",
@@ -112,3 +116,26 @@ class SerpApiProvider:
                 return snapshot(keyword, self.name, [])
             raise HTTPException(status_code=502, detail=f"SerpApi error: {message}")
         return normalize(data, keyword)
+
+
+ACCOUNT_URL = "https://serpapi.com/account.json"
+
+
+def account_info(api_key: str) -> dict[str, Any]:
+    """Plan and searches left for a key. SerpApi doesn't count this call toward the monthly quota."""
+    try:
+        res = requests.get(ACCOUNT_URL, params={"api_key": api_key}, timeout=20)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Couldn't reach SerpApi: {type(exc).__name__}") from exc
+    try:
+        data = res.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="SerpApi returned an unreadable response.") from exc
+    if not res.ok or data.get("error"):
+        raise HTTPException(status_code=400, detail="SerpApi didn't accept this key. Check it at serpapi.com/manage-api-key.")
+    # Only plan details go back to the browser: never the email, account id or key that SerpApi also returns.
+    return {
+        "plan_name": data.get("plan_name"),
+        "searches_per_month": data.get("searches_per_month"),
+        "searches_left": data.get("total_searches_left", data.get("plan_searches_left")),
+    }

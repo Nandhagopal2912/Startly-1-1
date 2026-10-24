@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 import config
 import store
 from analysis import AnalyzeRequest, run_analysis
+from stateless import analyze_with_own_key
 from db import norm
 from usage import calls_today
 
@@ -34,7 +35,7 @@ class BulkRequest(BaseModel):
     mock_mode: bool = False
 
 
-def _dedupe(request: BulkRequest) -> tuple[list[BulkKeyword], int]:
+def dedupe_keywords(request: BulkRequest) -> tuple[list[BulkKeyword], int]:
     """Unique keywords in input order; a later line's volume fills in or replaces an earlier one."""
     by_key: dict[str, BulkKeyword] = {}
     for item in request.keywords:
@@ -52,7 +53,7 @@ def _dedupe(request: BulkRequest) -> tuple[list[BulkKeyword], int]:
 
 
 def bulk_preview(request: BulkRequest) -> dict[str, Any]:
-    items, duplicates = _dedupe(request)
+    items, duplicates = dedupe_keywords(request)
     loc, lang = request.location_name, request.language_name
     demo = config.demo_mode()
     rows = []
@@ -82,8 +83,14 @@ def bulk_preview(request: BulkRequest) -> dict[str, Any]:
     }
 
 
-def _analyze_one(item: BulkKeyword, request: BulkRequest) -> dict[str, Any]:
+def _analyze_one(item: BulkKeyword, request: BulkRequest, own_key: str | None = None) -> dict[str, Any]:
     try:
+        if own_key:
+            analysis = analyze_with_own_key(
+                own_key, keyword=item.keyword, location_name=request.location_name,
+                language_name=request.language_name, search_volume=item.search_volume, previous=None,
+            )
+            return {"keyword": item.keyword, "status": "ok", "analysis": analysis}
         analysis = run_analysis(AnalyzeRequest(
             keyword=item.keyword,
             location_name=request.location_name,
@@ -109,11 +116,12 @@ def _rank_key(result: dict[str, Any]) -> tuple[int, float]:
     return (1, -float(analysis["report"]["summary"].get("organic_ctr_total") or 0))
 
 
-def bulk_analyze(request: BulkRequest) -> dict[str, Any]:
-    items, duplicates = _dedupe(request)
+def bulk_analyze(request: BulkRequest, own_key: str | None = None) -> dict[str, Any]:
+    """Rank keywords; with `own_key`, every keyword is a stateless search on the visitor's own SerpApi key."""
+    items, duplicates = dedupe_keywords(request)
     before = calls_today()
     with ThreadPoolExecutor(max_workers=BULK_WORKERS) as pool:
-        results = list(pool.map(lambda item: _analyze_one(item, request), items))
+        results = list(pool.map(lambda item: _analyze_one(item, request, own_key), items))
 
     results.sort(key=_rank_key)
     for rank, result in enumerate(results, start=1):
@@ -127,4 +135,6 @@ def bulk_analyze(request: BulkRequest) -> dict[str, Any]:
         "cap_reached": any(r.get("error_code") == 429 for r in errors),
         "duplicates_removed": duplicates,
         "api_calls_used": calls_today() - before,
+        # Searches made on the visitor's own key (they pay for these, not the server).
+        "own_key_searches": sum(1 for r in results if r["status"] == "ok") if own_key else 0,
     }

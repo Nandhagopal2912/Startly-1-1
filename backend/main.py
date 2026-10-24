@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -11,14 +11,16 @@ from pydantic import BaseModel, Field
 import config
 import store
 from analysis import AnalyzeRequest, run_analysis
-from bulk import BulkRequest, bulk_analyze, bulk_preview
+from bulk import BulkRequest, bulk_analyze, bulk_preview, dedupe_keywords
 from db import init_db
 from history import get_full_analysis, latest_full_analyses
 from migrate_cache import import_json_cache
 from ratelimit import RateLimitMiddleware
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
+from providers.serpapi import account_info
 from report_export import generate_csv_detailed, generate_pdf_detailed
+from stateless import KEY_HEADER, RescoreRequest, analyze_with_own_key, clean_key, rescore
 from usage import calls_today
 
 
@@ -36,7 +38,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins(),
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", KEY_HEADER],
 )
 
 MAX_REPORT_ROWS = 200
@@ -99,20 +101,46 @@ def health_dataforseo() -> dict[str, bool]:
 
 
 @app.post("/analyze")
-def analyze(request: AnalyzeRequest) -> dict[str, Any]:
+def analyze(request: AnalyzeRequest, own_key: str | None = Header(None, alias=KEY_HEADER)) -> dict[str, Any]:
+    """Analyze a keyword. With an X-SerpApi-Key header the search runs on that key and nothing is stored."""
+    key = clean_key(own_key)
+    if key:
+        return analyze_with_own_key(
+            key, keyword=request.keyword, location_name=request.location_name,
+            language_name=request.language_name, search_volume=request.search_volume, previous=request.previous,
+        )
     return run_analysis(request)
 
 
+@app.post("/rescore")
+def rescore_endpoint(request: RescoreRequest) -> dict[str, Any]:
+    """Re-score a results page the browser already has (e.g. after editing volume). No search, nothing stored."""
+    return rescore(request)
+
+
+@app.post("/key/check")
+def key_check(own_key: str | None = Header(None, alias=KEY_HEADER)) -> dict[str, Any]:
+    """Validate a visitor's SerpApi key and show its plan and searches left. Free: SerpApi doesn't count it."""
+    key = clean_key(own_key)
+    if not key:
+        raise HTTPException(status_code=400, detail=f"Send your SerpApi key in the {KEY_HEADER} header.")
+    return {"valid": True, **account_info(key)}
+
+
 @app.post("/bulk/preview")
-def bulk_preview_endpoint(request: BulkRequest) -> dict[str, Any]:
+def bulk_preview_endpoint(request: BulkRequest, own_key: str | None = Header(None, alias=KEY_HEADER)) -> dict[str, Any]:
     """What a bulk run would cost: cached keywords are free, the rest each need one API call."""
+    if clean_key(own_key):
+        # The browser knows which keywords it already has; everything sent here is a search on the visitor's key.
+        items, duplicates = dedupe_keywords(request)
+        return {"own_key": True, "total": len(items), "new_calls": len(items), "duplicates_removed": duplicates}
     return bulk_preview(request)
 
 
 @app.post("/bulk/analyze")
-def bulk_analyze_endpoint(request: BulkRequest) -> dict[str, Any]:
+def bulk_analyze_endpoint(request: BulkRequest, own_key: str | None = Header(None, alias=KEY_HEADER)) -> dict[str, Any]:
     """Analyze many keywords and rank them by capturable clicks."""
-    return bulk_analyze(request)
+    return bulk_analyze(request, own_key=clean_key(own_key))
 
 
 @app.get("/history")

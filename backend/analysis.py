@@ -13,6 +13,7 @@ import store
 from changes import changes_since_previous
 from providers import get_serp_provider, get_volume_provider
 from scoring import analyze_payload
+from stateless import PreviousCheck
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class AnalyzeRequest(BaseModel):
     refresh: bool = False
     # Re-score the newest saved results page however old it is; never calls a provider (e.g. after editing volume).
     cache_only: bool = False
+    # With the visitor's own key only: their previous check of this keyword, kept in their browser.
+    previous: PreviousCheck | None = None
 
 
 def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
