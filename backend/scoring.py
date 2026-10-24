@@ -42,6 +42,11 @@ def click_loss_percent(organic_results: int, model: dict[str, Any]) -> int:
     return max(0, round((1 - model["organic_ctr_total"] / clean) * 100))
 
 
+def _join(words: list[str]) -> str:
+    """'a', 'a and b', 'a, b and c'."""
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+
 def _fmt_range(mid: float | None, low: float | None, high: float | None, unit: str) -> str:
     if mid is None:
         return "unknown"
@@ -86,27 +91,32 @@ def build_analyze_report(
         sat_desc = "SERP is heavily dominated by special features."
 
     ctr_text = f"{model['organic_ctr_total']:.1f}% of searches"
+    loss_text = (
+        f"SERP features remove about {loss_pct}% of the clicks a plain results page would send."
+        if loss_pct else "Nothing on the page takes clicks away from the organic results."
+    )
     if has_volume:
         demand_body = (
             f"Of {raw_volume:,.0f} monthly searches, about "
             f"{_fmt_range(clicks, clicks_low, clicks_high, 'clicks')} are expected to reach an organic result on page one "
-            f"({ctr_text}). SERP features remove about {loss_pct}% of the clicks a plain results page would send."
+            f"({ctr_text}). {loss_text}"
         )
     else:
         demand_body = (
-            f"Page one sends organic clicks on about {ctr_text}. SERP features remove about {loss_pct}% of the clicks "
-            "a plain results page would send. Enter a monthly search volume to turn this into click counts."
+            f"Page one sends organic clicks on about {ctr_text}. {loss_text} "
+            "Enter a monthly search volume to turn this into click counts."
         )
 
     costly = [f["label"] for f in model["factors"]]
     neutral = [t.replace("_", " ") for t in model["neutral_features"]]
     real_estate = f"Classic organic links hold {saturation_score:.1%} of SERP items. "
     if costly:
-        real_estate += f"{', '.join(costly)} reduce organic clicks."
+        real_estate += f"{_join(costly)} {'reduces' if len(costly) == 1 else 'reduce'} organic clicks."
     else:
         real_estate += "No features that measurably reduce organic clicks were found."
     if neutral:
-        real_estate += f" {', '.join(neutral).capitalize()} appear but don't measurably lower organic clicks."
+        verb = "appears but doesn't" if len(neutral) == 1 else "appear but don't"
+        real_estate += f" {_join(neutral).capitalize()} {verb} measurably lower organic clicks."
 
     sections = [
         {"title": "Effective Market Demand", "body": demand_body},

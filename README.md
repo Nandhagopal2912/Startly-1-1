@@ -8,6 +8,10 @@ An SEO tool that estimates how many searchers would actually click an organic re
 ## 💎 Premium Features
 
 *   **Advanced Dashboard UI**: A modern, high-fidelity interface inspired by Linear and Vercel, featuring glassmorphism, responsive charts, and real-time animations.
+*   **Clear Verdicts and Next Steps**: Each keyword gets a verdict (worth targeting, modest, or low potential) from what the top positions are worth, plus recommended actions based on what Google shows: AI Overviews, maps, ads, People Also Ask and more.
+*   **Who Ranks Now**: The sites on page one, with the monthly clicks each position should get.
+*   **Edit Volume Any Time**: Add or change a keyword's monthly volume on the dashboard; it re-scores the saved page without an API call.
+*   **Country Targeting**: Analyze for 18 countries.
 *   **Position-Based Click Model**:
     *   **Capturable Clicks**: Monthly organic clicks on page one, shown as an estimate with a low–high range.
     *   **Clicks by Position**: What ranking #1, #2, #3… is worth for this keyword.

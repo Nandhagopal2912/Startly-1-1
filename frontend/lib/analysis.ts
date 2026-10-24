@@ -20,6 +20,8 @@ export type AnalysisRow = {
   analyzed_at?: string;
   rescored?: boolean;
   changes?: SerpChanges;
+  location_name?: string;
+  language_name?: string;
   report?: FullReport;
 };
 
@@ -66,6 +68,52 @@ export function clickTier(row: AnalysisRow) {
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+// Countries the SERP providers can target (see COUNTRY_CODES in backend/providers/serper.py).
+export const COUNTRIES = [
+  "United States", "United Kingdom", "India", "Canada", "Australia", "Germany", "France", "Spain", "Italy",
+  "Netherlands", "Brazil", "Mexico", "Japan", "Singapore", "United Arab Emirates", "South Africa",
+  "New Zealand", "Ireland",
+];
+
+export const DEFAULT_COUNTRY = "United States";
+
+export function rowCountry(row: AnalysisRow) {
+  return row.location_name ?? DEFAULT_COUNTRY;
+}
+
+export type SortKey = "clicks" | "volume" | "recent" | "name";
+
+export function sortRows(rows: AnalysisRow[], key: SortKey): AnalysisRow[] {
+  const clicks = (r: AnalysisRow) => (hasVolume(r) ? r.capturable_clicks ?? -1 : -1);
+  const sorted = [...rows];
+  if (key === "clicks") sorted.sort((a, b) => clicks(b) - clicks(a) || a.keyword.localeCompare(b.keyword));
+  if (key === "volume") sorted.sort((a, b) => (hasVolume(b) ? b.raw_volume : -1) - (hasVolume(a) ? a.raw_volume : -1));
+  if (key === "recent") sorted.sort((a, b) => (b.analysis_id ?? 0) - (a.analysis_id ?? 0));
+  if (key === "name") sorted.sort((a, b) => a.keyword.localeCompare(b.keyword));
+  return sorted;
+}
+
+// POST JSON and return the parsed body, turning FastAPI's {"detail": ...} errors into readable messages.
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
+    try {
+      const data = JSON.parse(text);
+      if (data.detail) detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+    } catch {
+      /* keep the generic message */
+    }
+    throw new Error(detail);
+  }
+  return JSON.parse(text) as T;
+}
+
 // Per-browser marker: analyses up to this id were cleared from the dashboard (history keeps them).
 const CLEARED_KEY = "startly.dashboardClearedAfterId";
 
@@ -75,6 +123,34 @@ export function readClearedAfterId(): number {
   } catch {
     return 0;
   }
+}
+
+// Per-browser: keywords removed from the dashboard -> the analysis id they were removed at.
+// A newer analysis of the same keyword brings it back.
+const HIDDEN_KEY = "startly.dashboardHidden";
+
+export function readHidden(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HIDDEN_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function hideKeyword(keyword: string, analysisId: number) {
+  try {
+    const hidden = readHidden();
+    hidden[keyword.toLowerCase()] = Math.max(hidden[keyword.toLowerCase()] ?? 0, analysisId);
+    window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+  } catch {
+    /* storage unavailable: removal just won't survive a refresh */
+  }
+}
+
+export function isHidden(row: AnalysisRow, hidden: Record<string, number>) {
+  const at = hidden[row.keyword.toLowerCase()];
+  return at !== undefined && (row.analysis_id ?? 0) <= at;
 }
 
 export function writeClearedAfterId(id: number) {

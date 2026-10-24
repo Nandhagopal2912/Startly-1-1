@@ -26,13 +26,13 @@ export function WhatChanged({
     changes?.clicks_before != null && changes?.clicks_after != null && changes.clicks_before !== changes.clicks_after;
 
   return (
-    <div className="glass-card rounded-[2.5rem] p-10 border border-slate-200/60 shadow-xl shadow-slate-200/50">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <GitCompare size={22} className="text-indigo-500" /> What Changed
+          <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <GitCompare size={18} className="text-indigo-500" /> What changed
           </h3>
-          <p className="text-sm text-slate-400 font-medium">
+          <p className="mt-0.5 text-xs text-slate-500">
             {hasPrevious
               ? `Page checked ${formatDate(changes?.current_fetched_at)}, compared with ${formatDate(changes?.previous_fetched_at)}`
               : changes?.current_fetched_at
@@ -44,7 +44,7 @@ export function WhatChanged({
           type="button"
           onClick={onRecheck}
           disabled={rechecking}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-50"
           title={costNote}
         >
           {rechecking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
@@ -112,7 +112,7 @@ export function WhatChanged({
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -130,11 +130,11 @@ const CHANGE_ICONS: Record<ChangeIcon, { el: JSX.Element; className: string }> =
 function ChangeList({ title, empty, items }: { title: string; empty: string; items: { icon: ChangeIcon; text: string }[] }) {
   return (
     <div>
-      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3">{title}</h4>
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
       {items.length ? (
         <ul className="space-y-2">
           {items.map((item, i) => (
-            <li key={i} className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+            <li key={i} className="flex items-center gap-3 text-sm text-slate-700">
               <span className={cn("h-6 w-6 shrink-0 rounded-lg flex items-center justify-center", CHANGE_ICONS[item.icon].className)}>
                 {CHANGE_ICONS[item.icon].el}
               </span>

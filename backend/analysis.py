@@ -25,6 +25,8 @@ class AnalyzeRequest(BaseModel):
     search_volume: float | None = Field(default=None, ge=0)
     # Fetch a fresh results page even if a cached one exists (costs one API call outside mock mode).
     refresh: bool = False
+    # Re-score the newest saved results page however old it is; never calls a provider (e.g. after editing volume).
+    cache_only: bool = False
 
 
 def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
@@ -60,7 +62,11 @@ def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[
 
 def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
     kw, loc, lang = request.keyword, request.location_name, request.language_name
-    found = None if request.refresh else store.latest_snapshot(kw, loc, lang, request.mock_mode)
+    found = None if request.refresh else store.latest_snapshot(
+        kw, loc, lang, request.mock_mode, fresh_only=not request.cache_only
+    )
+    if found is None and request.cache_only:
+        raise HTTPException(status_code=409, detail="No saved results page for this keyword yet. Analyze it first.")
     if found is not None:
         snapshot_id, payload = found
         source = "cache"
@@ -77,6 +83,8 @@ def run_analysis(request: AnalyzeRequest) -> dict[str, Any]:
         "source": source,
         "mock_mode": request.mock_mode,
         "provider": provider_name,
+        "location_name": loc,
+        "language_name": lang,
         **analysis,
         "changes": changes_since_previous(snapshot_id, payload, kw, volume, volume_source),
     }

@@ -6,8 +6,8 @@ import { ReactNode } from "react";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Traffic Opportunity Tool | Premium SaaS Dashboard",
-  description: "Advanced keyword analytics and traffic opportunity insights"
+  title: "Startly Analyze",
+  description: "How many organic clicks a keyword can really bring, after AI Overviews, ads and maps."
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

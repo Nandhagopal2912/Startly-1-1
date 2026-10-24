@@ -78,12 +78,14 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 export function BulkAnalysis({
   apiBase,
   mockMode,
+  location,
   onClose,
   onResults,
   onOpenKeyword,
 }: {
   apiBase: string;
   mockMode: boolean;
+  location: string;
   onClose: () => void;
   onResults: (rows: AnalysisRow[]) => void;
   onOpenKeyword: (keyword: string) => void;
@@ -97,7 +99,7 @@ export function BulkAnalysis({
 
   const parsed = useMemo(() => parseKeywordList(text), [text]);
   const tooMany = parsed.length > MAX_KEYWORDS;
-  const body = { keywords: parsed, mock_mode: mockMode, location_name: "United States", language_name: "English" };
+  const body = { keywords: parsed, mock_mode: mockMode, location_name: location, language_name: "English" };
 
   async function onPreview() {
     setError("");
@@ -136,7 +138,7 @@ export function BulkAnalysis({
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 tracking-tight">Bulk Analysis</h2>
-              <p className="text-xs font-medium text-slate-400">Rank up to {MAX_KEYWORDS} keywords by capturable clicks</p>
+              <p className="text-xs font-medium text-slate-400">Rank up to {MAX_KEYWORDS} keywords by capturable clicks · {location}</p>
             </div>
           </div>
           <button onClick={onClose} aria-label="Close bulk analysis" className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600">

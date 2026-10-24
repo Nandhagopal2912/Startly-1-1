@@ -87,3 +87,17 @@ def test_csv_export_includes_click_positions_and_sources():
     assert "CLICKS BY POSITION" in csv
     assert "Capturable clicks" in csv
     assert "CLICK MODEL FACTORS" in csv
+
+
+def test_cache_only_rescores_an_expired_page_without_spending(monkeypatch):
+    import store
+
+    stale = {"keyword": "old page", "provider": "serpapi", "keyword_data": {}, "items": [{"type": "organic"}] * 5}
+    store.save_snapshot("old page", "United States", "English", False, stale, fetched_at="2020-01-01T00:00:00+00:00")
+    monkeypatch.setenv("SERP_PROVIDER", "serpapi")  # no key: any provider call would fail with 503
+
+    body = client.post("/analyze", json={"keyword": "old page", "search_volume": 2000, "cache_only": True}).json()
+    assert body["source"] == "cache" and body["raw_volume"] == 2000
+    assert usage.calls_today() == 0
+    missing = client.post("/analyze", json={"keyword": "never analyzed", "cache_only": True})
+    assert missing.status_code == 409

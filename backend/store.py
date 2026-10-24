@@ -18,14 +18,16 @@ def _fresh_after() -> str | None:
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
 
 
-def latest_snapshot(keyword: str, location: str, language: str, mock_mode: bool) -> tuple[int, dict[str, Any]] | None:
-    """Newest fresh snapshot as (id, payload), or None if there is none."""
+def latest_snapshot(
+    keyword: str, location: str, language: str, mock_mode: bool, fresh_only: bool = True
+) -> tuple[int, dict[str, Any]] | None:
+    """Newest snapshot as (id, payload), or None; with fresh_only, older than CACHE_TTL_DAYS doesn't count."""
     sql = (
         "SELECT id, payload FROM serp_snapshots "
         "WHERE keyword = ? AND location = ? AND language = ? AND mock_mode = ?"
     )
     params: list[Any] = [norm(keyword), norm(location), norm(language), int(mock_mode)]
-    cutoff = _fresh_after()
+    cutoff = _fresh_after() if fresh_only else None
     if cutoff:
         sql += " AND fetched_at >= ?"
         params.append(cutoff)
