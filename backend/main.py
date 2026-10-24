@@ -37,6 +37,7 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins(),
+    allow_origin_regex=config.allowed_origin_regex(),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", KEY_HEADER],
 )

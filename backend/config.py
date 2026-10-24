@@ -65,6 +65,12 @@ def allowed_origins() -> list[str]:
     return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
 
 
+def allowed_origin_regex() -> str | None:
+    """Without ALLOWED_ORIGINS (local development), allow any localhost port, e.g. when Next.js picks 3001.
+    Setting ALLOWED_ORIGINS for a deployment turns this off, so only the listed origins work."""
+    return None if env_clean("ALLOWED_ORIGINS") else r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
 def rate_limit_per_minute() -> int:
     """Requests per client IP per minute (0 = no limit)."""
     return env_int("RATE_LIMIT_PER_MINUTE", 120)

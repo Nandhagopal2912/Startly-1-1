@@ -101,11 +101,20 @@ export function sortRows(rows: AnalysisRow[], key: SortKey): AnalysisRow[] {
 
 // POST JSON and return the parsed body, turning FastAPI's {"detail": ...} errors into readable messages.
 export async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // The browser hides the reason: usually the backend is down, or it doesn't allow this page's address (CORS).
+    throw new Error(
+      `Can't reach the backend at ${API_BASE}. Check that it's running, and that this page's address ` +
+        `(${window.location.origin}) is allowed in ALLOWED_ORIGINS.`
+    );
+  }
   const text = await res.text();
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;

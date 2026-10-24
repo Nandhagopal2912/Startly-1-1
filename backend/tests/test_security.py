@@ -81,6 +81,22 @@ def test_cors_allows_only_configured_origins():
     assert "access-control-allow-origin" not in bad.headers
 
 
+def test_local_development_allows_any_localhost_port():
+    for origin in ["http://localhost:3001", "http://127.0.0.1:5173"]:
+        res = client.options("/analyze", headers={"Origin": origin, "Access-Control-Request-Method": "POST"})
+        assert res.headers.get("access-control-allow-origin") == origin, origin
+    for origin in ["http://localhost.evil.example", "https://localhost:3000.evil.example", "http://192.168.1.5:3000"]:
+        res = client.options("/analyze", headers={"Origin": origin, "Access-Control-Request-Method": "POST"})
+        assert "access-control-allow-origin" not in res.headers, origin
+
+
+def test_setting_allowed_origins_turns_off_the_localhost_rule(monkeypatch):
+    import config
+
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://startly.example")
+    assert config.allowed_origin_regex() is None
+
+
 def test_allowed_origins_come_from_env(monkeypatch):
     import config
 
