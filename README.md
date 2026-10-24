@@ -13,6 +13,7 @@ An SEO tool that estimates how many searchers would actually click an organic re
     *   **Clicks by Position**: What ranking #1, #2, #3… is worth for this keyword.
     *   **Sourced Effects**: AI Overviews, local packs, image packs and ads reduce clicks by amounts taken from published CTR studies, each labelled with its confidence and source.
     *   **Zero-Click Risk**: Flags pages where Google answers the query itself.
+*   **Bulk Analysis**: Paste up to 50 keywords (optionally with volumes), see how many API calls the batch needs before running it, and get them ranked by capturable clicks.
 *   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode, chosen in `.env`.
 *   **Cost Guardrails**: Local SQLite cache, remembered volumes, and a daily cap on paid API calls.
 *   **Intelligence Logs**: History of analyzed keywords, stored locally and available at `GET /history`.

@@ -1,25 +1,23 @@
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 import config
 import store
+from analysis import AnalyzeRequest, run_analysis
+from bulk import BulkRequest, bulk_analyze, bulk_preview
 from db import init_db
 from migrate_cache import import_json_cache
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
 from report_export import generate_csv_detailed, generate_pdf_detailed
-from scoring import analyze_payload
 from usage import calls_today
-
-log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -29,7 +27,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Traffic Opportunity API", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Traffic Opportunity API", version="1.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,15 +35,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-class AnalyzeRequest(BaseModel):
-    keyword: str = Field(..., min_length=1)
-    location_name: str = "United States"
-    language_name: str = "English"
-    mock_mode: bool = False
-    # Monthly searches the user already knows (e.g. from Keyword Planner); overrides any API volume.
-    search_volume: float | None = Field(default=None, ge=0)
 
 
 class DetailedReportRow(BaseModel):
@@ -67,37 +56,6 @@ class DetailedReportRow(BaseModel):
 class ReportRequest(BaseModel):
     rows: list[DetailedReportRow]
     format: Literal["csv", "pdf"] = "csv"
-
-
-def _resolve_volume(request: AnalyzeRequest, snapshot: dict[str, Any]) -> tuple[float | None, str]:
-    """Volume and its source; (None, "") means use whatever the snapshot itself carries."""
-    kw, loc, lang = request.keyword, request.location_name, request.language_name
-    if request.search_volume is not None:
-        # Remember it, so the next analysis of this keyword doesn't need it typed again.
-        store.save_volume(kw, loc, lang, request.search_volume, "user")
-        return request.search_volume, "user"
-
-    stored = store.get_volume(kw, loc, lang)
-    if stored is not None:
-        return stored
-
-    # Mock snapshots and pre-SQLite cache imports carry their own volume.
-    if request.mock_mode or (snapshot.get("keyword_data") or {}).get("search_volume") is not None:
-        return None, ""
-
-    volume_provider = get_volume_provider()
-    if volume_provider is None or not volume_provider.is_configured():
-        return None, ""
-    try:
-        volume = volume_provider.fetch_volume(kw, loc, lang)
-    except HTTPException as exc:
-        # The SERP is still useful without volume; don't throw away a paid call.
-        log.warning("Volume lookup failed for %r: %s", kw, exc.detail)
-        return None, ""
-    if volume is None:
-        return None, ""
-    store.save_volume(kw, loc, lang, volume, volume_provider.name)
-    return volume, volume_provider.name
 
 
 @app.get("/health")
@@ -128,25 +86,19 @@ def health_dataforseo() -> dict[str, bool]:
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest) -> dict[str, Any]:
-    kw, loc, lang = request.keyword, request.location_name, request.language_name
-    found = store.latest_snapshot(kw, loc, lang, request.mock_mode)
-    if found is not None:
-        snapshot_id, payload = found
-        source = "cache"
-    else:
-        provider = get_serp_provider("mock" if request.mock_mode else None)
-        payload = provider.fetch_serp(kw, loc, lang)
-        snapshot_id = store.save_snapshot(kw, loc, lang, request.mock_mode, payload)
-        source = "api"
+    return run_analysis(request)
 
-    volume, volume_source = _resolve_volume(request, payload)
-    analysis = analyze_payload(payload, kw, volume_override=volume, volume_source=volume_source)
-    provider_name = str(payload.get("provider") or "dataforseo")
-    store.record_analysis(
-        keyword=analysis["keyword"], location=loc, language=lang,
-        snapshot_id=snapshot_id, provider=provider_name, analysis=analysis,
-    )
-    return {"source": source, "mock_mode": request.mock_mode, "provider": provider_name, **analysis}
+
+@app.post("/bulk/preview")
+def bulk_preview_endpoint(request: BulkRequest) -> dict[str, Any]:
+    """What a bulk run would cost: cached keywords are free, the rest each need one API call."""
+    return bulk_preview(request)
+
+
+@app.post("/bulk/analyze")
+def bulk_analyze_endpoint(request: BulkRequest) -> dict[str, Any]:
+    """Analyze many keywords and rank them by capturable clicks."""
+    return bulk_analyze(request)
 
 
 @app.get("/history")

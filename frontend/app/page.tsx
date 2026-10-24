@@ -30,13 +30,15 @@ import {
   MoreHorizontal,
   ArrowRight,
   Download,
-  Filter,
+  ListOrdered,
   FileText
 } from "lucide-react";
 import { cn, formatNumber } from "../lib/utils";
 import { InsightsPanel, type FullReport } from "../components/AnalyzeReport";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { ClicksByPosition } from "../components/ClicksByPosition";
+import { BulkAnalysis } from "../components/BulkAnalysis";
+import { type AnalysisRow, clickTier, clicksDescription, clicksValue, hasVolume, volumeLabel } from "../lib/analysis";
 
 ChartJS.register(
   CategoryScale, 
@@ -51,24 +53,6 @@ ChartJS.register(
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
-type AnalysisRow = {
-  keyword: string;
-  raw_volume: number;
-  adjusted_volume: number;
-  saturation_score: number;
-  organic_results: number;
-  total_results: number;
-  penalty_applied: boolean;
-  source: string;
-  mock_mode: boolean;
-  provider?: string;
-  volume_source?: string;
-  capturable_clicks?: number | null;
-  capturable_clicks_low?: number | null;
-  capturable_clicks_high?: number | null;
-  report?: FullReport;
-};
-
 export default function HomePage() {
   const [keyword, setKeyword] = useState("");
   const [mockMode, setMockMode] = useState(false);
@@ -78,6 +62,21 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [rows, setRows] = useState<AnalysisRow[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  // Bulk results go into the same list as single analyses, so the history table, charts and exports include them.
+  function addBulkResults(newRows: AnalysisRow[]) {
+    if (!newRows.length) return;
+    const fresh = new Set(newRows.map((r) => r.keyword));
+    setRows((prev) => [...newRows, ...prev.filter((r) => !fresh.has(r.keyword))]);
+    setSelectedKeyword(newRows[0].keyword);
+  }
+
+  function openFromBulk(keyword: string) {
+    setSelectedKeyword(keyword);
+    setBulkOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   const selectedRow = useMemo(() => {
     if (!rows.length) return null;
@@ -199,6 +198,15 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 selection:bg-indigo-100">
+      {bulkOpen && (
+        <BulkAnalysis
+          apiBase={API_BASE}
+          mockMode={mockMode}
+          onClose={() => setBulkOpen(false)}
+          onResults={addBulkResults}
+          onOpenKeyword={openFromBulk}
+        />
+      )}
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
@@ -258,8 +266,14 @@ export default function HomePage() {
           </form>
 
           <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-              <Filter size={20} />
+            <button
+              type="button"
+              onClick={() => setBulkOpen(true)}
+              className="inline-flex items-center gap-2 h-11 px-4 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600 transition-colors"
+              title="Analyze and rank a list of keywords"
+            >
+              <ListOrdered size={18} />
+              Bulk
             </button>
             <div className="h-4 w-[1px] bg-slate-200" />
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100">
@@ -361,7 +375,7 @@ export default function HomePage() {
                   icon={<Zap />}
                   title="Capturable Clicks"
                   value={clicksValue(selectedRow)}
-                  trend={`-${selectedRow.report?.summary.penalty_percent ?? 0}%`}
+                  trend={selectedRow.report?.summary.penalty_percent ? `-${selectedRow.report.summary.penalty_percent}%` : "0%"}
                   status={selectedRow.penalty_applied ? "warning" : "success"}
                   description={clicksDescription(selectedRow)}
                 />
@@ -627,44 +641,6 @@ export default function HomePage() {
       </footer>
     </div>
   );
-}
-
-const VOLUME_LABELS: Record<string, string> = {
-  user: "Your entry",
-  dataforseo: "DataForSEO",
-  mock: "Mock data",
-  api: "API",
-  unknown: "No volume",
-};
-
-function volumeLabel(source?: string) {
-  return VOLUME_LABELS[source ?? "unknown"] ?? source ?? "No volume";
-}
-
-function hasVolume(row: AnalysisRow) {
-  return row.volume_source !== "unknown";
-}
-
-function clicksValue(row: AnalysisRow) {
-  return hasVolume(row) && row.capturable_clicks != null ? formatNumber(row.capturable_clicks) : "—";
-}
-
-function clicksDescription(row: AnalysisRow) {
-  const { capturable_clicks_low: low, capturable_clicks_high: high } = row;
-  if (!hasVolume(row) || row.capturable_clicks == null) {
-    const ctr = row.report?.summary.organic_ctr_total;
-    return ctr != null ? `${ctr.toFixed(1)}% of searches click organic` : "Enter a volume to estimate clicks";
-  }
-  if (low != null && high != null && low !== high) return `Range ${formatNumber(low)}–${formatNumber(high)} a month`;
-  return "Monthly organic clicks on page one";
-}
-
-// Tier by how many clicks SERP features take, compared with a plain results page.
-function clickTier(row: AnalysisRow) {
-  const loss = row.report?.summary.penalty_percent ?? 0;
-  if (loss < 25) return { label: "Open", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
-  if (loss < 50) return { label: "Contested", className: "bg-amber-100 text-amber-700 border border-amber-200" };
-  return { label: "Click-hostile", className: "bg-rose-100 text-rose-700 border border-rose-200" };
 }
 
 function KPICard({
