@@ -120,7 +120,39 @@ def test_rate_limit_is_per_forwarded_ip_behind_a_proxy(monkeypatch):
     monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
     assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
     assert client.get("/health", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 200
-    assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1, 10.0.0.1"}).status_code == 429
+    assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 429
+
+
+def test_faked_forwarded_entries_dont_bypass_the_limit(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "1")
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    # The client writes whatever it likes on the left; the host's proxy appends the real address (5.5.5.5).
+    assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1, 5.5.5.5"}).status_code == 200
+    assert client.get("/health", headers={"X-Forwarded-For": "2.2.2.2, 5.5.5.5"}).status_code == 429
+
+
+def test_proxy_hops_skip_a_cdn_in_front(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "1")
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "2")
+    # fake, real visitor (added by the CDN), CDN edge (added by the host's proxy)
+    assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1, 5.5.5.5, 172.70.0.1"}).status_code == 200
+    assert client.get("/health", headers={"X-Forwarded-For": "2.2.2.2, 5.5.5.5, 172.70.0.2"}).status_code == 429
+    assert client.get("/health", headers={"X-Forwarded-For": "1.1.1.1, 6.6.6.6, 172.70.0.1"}).status_code == 200
+
+
+def test_idle_ips_are_forgotten(monkeypatch):
+    import ratelimit
+
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "5")
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    for i in range(3):
+        client.get("/health", headers={"X-Forwarded-For": f"10.0.0.{i}"})
+    assert len(ratelimit._hits) == 3
+    clock = ratelimit.time.monotonic() + ratelimit.WINDOW_SECONDS + 1
+    monkeypatch.setattr(ratelimit.time, "monotonic", lambda: clock)
+    client.get("/health", headers={"X-Forwarded-For": "10.0.0.9"})
+    assert list(ratelimit._hits) == ["10.0.0.9"]
 
 
 def test_forwarded_header_is_ignored_unless_trusted(monkeypatch):

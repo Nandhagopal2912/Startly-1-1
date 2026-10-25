@@ -18,7 +18,7 @@ def request_scheme(request: Request) -> str:
     if config.trust_proxy_headers():
         forwarded = request.headers.get("x-forwarded-proto", "")
         if forwarded:
-            return forwarded.split(",")[0].strip().lower()
+            return forwarded.split(",")[-1].strip().lower()  # the proxy's own entry is last
     return request.url.scheme
 
 

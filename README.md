@@ -73,7 +73,8 @@ Startly is built to run on your own machine. Before putting it online, run the b
 | `DEMO_MODE` | `true` | Serves only saved analyses; no provider calls, no database writes. Unknown keywords, re-checks and mock analyses are refused. Volume edits apply to that response only. |
 | `ALLOWED_ORIGINS` | your frontend URL | Only your site's pages can call the API. |
 | `RATE_LIMIT_PER_MINUTE` | e.g. `60` | Per-IP request limit (`429` with `Retry-After` when exceeded). |
-| `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`. |
+| `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`, read from the right so visitors can't fake it. |
+| `TRUSTED_PROXY_HOPS` | `1` (`2` with a CDN in front) | How many of your own proxies add to `X-Forwarded-For`. |
 
 The sample keywords ship with the code in `backend/demo_data/seed.json`. When a `DEMO_MODE=true` server starts with an empty database, it loads them automatically, so a fresh deployment needs no database file. To change the samples, analyze the keywords locally with your key (real results only; mock analyses are skipped), then run `python demo_seed.py export` in `backend/` and commit the updated seed.
 

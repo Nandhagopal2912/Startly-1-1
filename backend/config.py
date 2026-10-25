@@ -79,3 +79,8 @@ def rate_limit_per_minute() -> int:
 def trust_proxy_headers() -> bool:
     """Read the client IP from X-Forwarded-For; only enable behind a proxy that sets it (most hosts do)."""
     return env_bool("TRUST_PROXY_HEADERS")
+
+
+def trusted_proxy_hops() -> int:
+    """How many proxies of yours add to X-Forwarded-For: 1 for a host's proxy, 2 with a CDN such as Cloudflare in front."""
+    return max(1, env_int("TRUSTED_PROXY_HOPS", 1))

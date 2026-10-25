@@ -16,19 +16,34 @@ WINDOW_SECONDS = 60
 
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _lock = threading.Lock()
+_last_prune = time.monotonic()
 
 
 def reset() -> None:
+    global _last_prune
     with _lock:
         _hits.clear()
+        _last_prune = time.monotonic()
 
 
 def client_ip(request: Request) -> str:
+    """The visitor's IP. Behind trusted proxies, read X-Forwarded-For from the right: each proxy appends the
+    address it saw, while everything to the left of our own proxies' entries came from the client and can be faked."""
     if config.trust_proxy_headers():
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        entries = [e.strip() for e in request.headers.get("x-forwarded-for", "").split(",") if e.strip()]
+        if entries:
+            return entries[max(len(entries) - config.trusted_proxy_hops(), 0)]
     return request.client.host if request.client else "unknown"
+
+
+def _prune(now: float) -> None:
+    """Forget IPs with no requests in the last window, so one-time visitors don't stay in memory. Call with _lock held."""
+    global _last_prune
+    if now - _last_prune < WINDOW_SECONDS:
+        return
+    for ip in [ip for ip, hits in _hits.items() if not hits or now - hits[-1] >= WINDOW_SECONDS]:
+        del _hits[ip]
+    _last_prune = now
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -39,6 +54,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         ip, now = client_ip(request), time.monotonic()
         with _lock:
+            _prune(now)
             hits = _hits[ip]
             while hits and now - hits[0] >= WINDOW_SECONDS:
                 hits.popleft()
