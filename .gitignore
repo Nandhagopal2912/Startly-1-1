@@ -16,3 +16,6 @@ backend/.env
 
 # SQLite database
 backend/data/
+
+# Local Claude Code config
+.claude/
