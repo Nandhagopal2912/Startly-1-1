@@ -2,6 +2,8 @@
 
 **How many clicks can a keyword really bring, after Google's AI Overviews, ads and maps take their share?**
 
+**[▶ Try the live demo](https://startly-analyze.onrender.com)**: free, no sign-up. It runs on a free hosting tier, so the first visit after a quiet period can take about a minute to wake up.
+
 Search tools usually show how many people *search* for a keyword. Startly estimates how many of them would actually *click* an organic result. It reads the live Google results page for the keyword, sees what's on it (AI Overview, ads, map, images, People Also Ask…), and applies published click-through research to turn search volume into **capturable organic clicks**, with a range and a value for each ranking position.
 
 ![Startly dashboard showing the analysis for "what is a roth ira"](images/dashboard.png)
@@ -134,7 +136,7 @@ Other protections: a Content Security Policy with a per-request nonce (`frontend
 - The click model uses industry averages and hasn't been validated against real traffic yet.
 - Results pages are snapshots; the demo's samples are from October 2026.
 - Search volume has to be entered by hand unless DataForSEO is configured.
-- On free hosting tiers, the demo may take about a minute to wake up after a quiet period.
+- The live demo runs on Render's free tier: it sleeps after 15 minutes without visitors and takes about a minute to wake up.
 
 ## Project docs
 
