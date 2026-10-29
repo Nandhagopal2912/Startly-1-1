@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ from bulk import BulkRequest, bulk_analyze, bulk_preview, dedupe_keywords
 from db import init_db
 from demo_seed import load_seed_if_empty
 from history import get_full_analysis, latest_full_analyses
-from ratelimit import RateLimitMiddleware
+from ratelimit import RateLimitMiddleware, client_ip
 from security import SecurityMiddleware
 from providers import get_serp_provider, get_volume_provider
 from providers.dataforseo import credentials as dataforseo_credentials
@@ -87,6 +87,18 @@ class ReportRequest(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# TEMPORARY: shows how the hosting proxy forwards the caller's address, to set up the rate limiter. Remove after.
+# It only echoes the caller's own request, so it reveals nothing about anyone else.
+@app.get("/debug/client-ip")
+def debug_client_ip(request: Request) -> dict[str, Any]:
+    names = ("x-forwarded-for", "cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-proto", "forwarded")
+    return {
+        "socket_peer": request.client.host if request.client else None,
+        "headers": {name: request.headers.get(name) for name in names},
+        "rate_limiter_sees": client_ip(request),
+    }
 
 
 @app.get("/health/provider")
