@@ -1,112 +1,144 @@
-# Startly Analyze: Traffic Opportunity Tool
+# Startly Analyze
 
-An SEO tool that estimates how many searchers would actually click an organic result for a keyword. It reads the live Google results page (AI Overviews, ads, maps, organic links) and applies published click-through-rate data to turn search volume into **capturable organic clicks**, with a range and a per-position breakdown.
+**How many clicks can a keyword really bring, after Google's AI Overviews, ads and maps take their share?**
 
-![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-1.jpg)
-![Startly Dashboard](https://github.com/Nandhagopal2912/Startly-1-1/blob/08e160c4b54b59ebdb85111b9632dbd4183f09cc/images/startly-1-1_live_data-2.jpg)
+Search tools usually show how many people *search* for a keyword. Startly estimates how many of them would actually *click* an organic result. It reads the live Google results page for the keyword, sees what's on it (AI Overview, ads, map, images, People Also Ask…), and applies published click-through research to turn search volume into **capturable organic clicks**, with a range and a value for each ranking position.
 
-## 💎 Premium Features
+![Startly dashboard showing the analysis for "what is a roth ira"](images/dashboard.png)
 
-*   **Advanced Dashboard UI**: A modern, high-fidelity interface inspired by Linear and Vercel, featuring glassmorphism, responsive charts, and real-time animations.
-*   **Clear Verdicts and Next Steps**: Each keyword gets a verdict (worth targeting, modest, or low potential) from what the top positions are worth, plus recommended actions based on what Google shows: AI Overviews, maps, ads, People Also Ask and more.
-*   **Who Ranks Now**: The sites on page one, with the monthly clicks each position should get.
-*   **Edit Volume Any Time**: Add or change a keyword's monthly volume on the dashboard; it re-scores the saved page without an API call.
-*   **Country Targeting**: Analyze for 18 countries.
-*   **Position-Based Click Model**:
-    *   **Capturable Clicks**: Monthly organic clicks on page one, shown as an estimate with a low–high range.
-    *   **Clicks by Position**: What ranking #1, #2, #3… is worth for this keyword.
-    *   **Sourced Effects**: AI Overviews, local packs, image packs and ads reduce clicks by amounts taken from published CTR studies, each labelled with its confidence and source.
-    *   **Zero-Click Risk**: Flags pages where Google answers the query itself.
-*   **Bulk Analysis**: Paste up to 50 keywords (optionally with volumes), see how many API calls the batch needs before running it, and get them ranked by capturable clicks.
-*   **Swappable Data Providers**: SerpApi (detects AI Overviews), Serper, DataForSEO, or a free mock mode. The default is set in `.env`; a **Data source** switch in the header changes it per browser without a restart, with a note on what each source can and can't see (Serper misses AI Overviews, so its click estimates run high).
-*   **Cost Guardrails**: Local SQLite cache, remembered volumes, a daily cap on paid API calls, and live credit balances for your SerpApi and Serper keys in the header (`GET /credits`; free provider checks, cached for a minute, hidden in demo mode).
-*   **SERP Change Tracking**: Re-check a keyword to fetch Google's page again and see what changed since the last check: features that appeared or disappeared, sites that moved, and the effect on capturable clicks.
-*   **Saved History**: Every analysis is stored locally. The dashboard restores your recent keywords after a refresh, and the History page lets you search and reopen any past analysis without API calls.
-*   **Exports**: A PDF report written as a document: a cover with headline numbers, contents, a summary with key findings, a ranked table and charts (searches vs capturable clicks, an opportunity map), a guide to the terms, a page per keyword (where 100 searches go, clicks by position with the ranking sites, before/after changes, what to do), and the method and sources. Also a keyword CSV with one row per keyword, and a page-one rankings CSV. Export everything or just the selected keyword. CSVs open cleanly in Excel and are protected against formula injection.
+## Why it exists
 
-## 🚀 Quick Start
+Google answers more and more searches on the results page itself, so "10,000 searches a month" can mean 8,000 clicks for websites or 800. The professional tools that show this cost $100 or more a month. Startly is a free, open alternative for bloggers, small businesses and anyone deciding what to write about, and it shows its sources and its uncertainty instead of a single confident number.
 
-### 1) Backend Setup
+## What it does
+
+- **A verdict for each keyword**: worth targeting, modest or low potential, from what the top positions are worth.
+- **Capturable clicks with a range**, plus what ranking #1, #2, #3… is worth.
+- **What takes the clicks**: AI Overviews, maps, images and ads, each with the size of its effect, its confidence and its source.
+- **What to do next**, based on what Google shows for the search (for example, "write an answer Google can cite" when there's an AI Overview).
+- **Who ranks now**: the sites on page one and the clicks each position should get.
+- **Change tracking**: re-check a keyword and see what changed since last time (features, rankings and the effect on clicks).
+- **Bulk analysis**: up to 50 keywords at once, with a cost preview before any paid search runs.
+- **Exports**: a PDF report written as a document (summary, charts, a page per keyword, method and sources), and CSVs that open cleanly in Excel.
+- **18 countries**, saved history, and search volume you can type in or edit at any time without an API call.
+
+<details>
+<summary>The full page: rankings and what changed since the last check</summary>
+
+![Full Startly dashboard including the "What changed" comparison](images/dashboard-full.png)
+
+</details>
+
+## How accurate is it?
+
+Partly real data and partly estimates, and the app says which is which:
+
+| Layer | Where it comes from | How much to trust it |
+|---|---|---|
+| The results page | The live Google page, fetched through SerpApi | Real, but a snapshot of one moment, one country and one device type |
+| Monthly searches | Typed in by you (for example, from Google Keyword Planner) | Only as good as the number entered |
+| Capturable clicks | Published click-through studies (Advanced Web Ranking 2026, Ahrefs) | Averages across millions of searches; a single keyword can differ by 2× |
+
+It's most reliable for **comparing keywords** and **spotting traps** ("50,000 searches, but an AI Overview and a map take most of the clicks"), and least reliable as an exact forecast. The estimates haven't yet been checked against a real site's Search Console data. Every number, its source and the limitations are in **[METHODOLOGY.md](METHODOLOGY.md)**.
+
+## Try it
+
+### With Docker (the public demo, no keys needed)
+
+```bash
+docker compose up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000). This runs the read-only demo with the sample keywords. To analyze your own keywords in it, click **Use your key** and add a free [SerpApi](https://serpapi.com) key (250 searches a month).
+
+### For development (your own keys, everything saved)
+
+**Backend** (Python 3.10 or newer):
+
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+.venv\Scripts\activate        # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-```
-Choose a data source in `.env`:
-- `SERP_PROVIDER=serpapi` with a free `SERPAPI_API_KEY` from [serpapi.com](https://serpapi.com) (250 searches/month). **Recommended:** it is the only free option here that detects AI Overviews, or
-- `SERP_PROVIDER=serper` (default) with a free `SERPER_API_KEY` from [serper.dev](https://serper.dev). It is cheaper, but it doesn't return AI Overviews, so their effect on clicks is never applied, or
-- `SERP_PROVIDER=dataforseo` with `DATAFORSEO_EMAIL` and `DATAFORSEO_PASSWORD`, or
-- `SERP_PROVIDER=mock` to develop without any key.
-
-Serper doesn't provide search volume, so type it into the **Volume** box (for example, from Google Keyword Planner), or set `VOLUME_PROVIDER=dataforseo`. `MAX_API_CALLS_PER_DAY` (default 50) stops a bug from draining your credits.
-
-Results are stored in a local SQLite database at `backend/data/startly.db` (created automatically; not committed). Each keyword is fetched again after `CACHE_TTL_DAYS` (default 7). Volumes you type in are remembered. Past analyses are on the **History** page (`GET /history`, `GET /history/{id}`).
-
-Run the tests (no API calls, no keys needed):
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
-
-Run the API:
-```bash
+cp .env.example .env          # then add a key, see below
 uvicorn main:app --reload --port 8000
 ```
 
-### 2) Frontend Setup
-Needs Node.js 20.9 or newer (an LTS release such as 22 or 24 is best).
+**Frontend** (Node.js 20.9 or newer; an LTS release such as 22 or 24 is best):
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
 Open [http://localhost:3000](http://localhost:3000).
 
-## 🌐 Running a Public Demo
+Pick a data source in `backend/.env`:
 
-Startly is built to run on your own machine. Before putting it online, run the backend in **demo mode**, so visitors can't spend your API credits or change your data:
+| `SERP_PROVIDER` | Key | Notes |
+|---|---|---|
+| `serpapi` | `SERPAPI_API_KEY` from [serpapi.com](https://serpapi.com) | **Recommended.** Free tier of 250 searches a month, and the only free option here that detects AI Overviews |
+| `serper` (default) | `SERPER_API_KEY` from [serper.dev](https://serper.dev) | Cheaper, but can't see AI Overviews, so click estimates run high when one is present |
+| `dataforseo` | `DATAFORSEO_EMAIL`, `DATAFORSEO_PASSWORD` | Paid; can also supply search volume (`VOLUME_PROVIDER=dataforseo`) |
+| `mock` | none | Fake data for development |
 
-| Setting (`backend/.env`) | Value for a public demo | What it does |
-| :--- | :--- | :--- |
-| `DEMO_MODE` | `true` | Serves only saved analyses; no provider calls, no database writes. Unknown keywords, re-checks and mock analyses are refused. Volume edits apply to that response only. |
-| `ALLOWED_ORIGINS` | your frontend URL | Only your site's pages can call the API. |
-| `RATE_LIMIT_PER_MINUTE` | e.g. `60` | Per-IP request limit (`429` with `Retry-After` when exceeded). |
-| `TRUST_PROXY_HEADERS` | `true` behind a hosting proxy | Rate-limits the real client IP from `X-Forwarded-For`, read from the right so visitors can't fake it. |
-| `TRUSTED_PROXY_HOPS` | `1` (`2` with a CDN in front) | How many of your own proxies add to `X-Forwarded-For`. |
+The **Data source** switch in the app's header changes the source per browser without a restart, and shows the credits left on each key. Results are cached in a local SQLite database (`backend/data/startly.db`, not committed) and fetched again after `CACHE_TTL_DAYS` (default 7). `MAX_API_CALLS_PER_DAY` (default 50) stops a bug from draining your credits.
 
-The sample keywords ship with the code in `backend/demo_data/seed.json`. When a `DEMO_MODE=true` server starts with an empty database, it loads them automatically, so a fresh deployment needs no database file. To change the samples, analyze the keywords locally with your key (real results only; mock analyses are skipped), then run `python demo_seed.py export` in `backend/` and commit the updated seed.
+**Tests** (offline, no keys needed):
 
-**Visitors can use their own key.** In the demo, anyone can explore the samples for free, or add their own free [SerpApi](https://serpapi.com) key to analyze any keyword:
-- The key stays in their browser and is sent only with their own searches, in an `X-SerpApi-Key` header. The server uses it for that request and never stores or logs it.
-- Their results are saved **in their browser** (with the results page), so reopening, editing volume (`POST /rescore`) and comparing re-checks need no further searches, and nobody else can see them.
-- `POST /key/check` validates a key and shows searches left, using SerpApi's free account endpoint.
-- These searches use the visitor's quota, not yours, and don't count toward `MAX_API_CALLS_PER_DAY`.
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
 
-**Serve the demo over HTTPS.** Keys are refused over plain HTTP everywhere except `localhost`: the backend rejects them, and the key dialog is disabled. Behind a hosting proxy, set `TRUST_PROXY_HEADERS=true` so the backend sees the original `https` scheme. Other protections:
-- **Content Security Policy** with a per-request nonce (`frontend/proxy.ts`). The page can only run its own scripts and only connect to itself and the API, so injected code can't send a key to another site by fetch, image or form.
-- **HSTS** on HTTPS responses, so browsers keep using HTTPS.
-- **`Cache-Control: no-store`** on API responses, so browsers and proxies keep no copies.
-- Leave `SERPAPI_API_KEY` empty on the hosted server. The demo doesn't need it.
+```bash
+cd frontend
+npm run lint
+```
 
-Never deploy with `DEMO_MODE=false` and your own API key: anyone could use your credits.
+## Running it publicly
 
-## 🧠 Methodology
+Never deploy with your own API key and `DEMO_MODE=false`: anyone could spend your credits. The public version runs in **demo mode**:
 
-Startly shows how many people would actually click an organic result, not just how many search.
+- **Read-only.** It serves the sample keywords and never writes to the database or uses the server's keys.
+- **Visitors bring their own key.** It stays in their browser and goes only with their own searches (in an `X-SerpApi-Key` header). The server uses it for that one request and never stores or logs it. Their results are saved in their browser too.
+- **Sample data ships with the code** (`backend/demo_data/seed.json`). A demo server that starts with an empty database loads it automatically, so hosts with temporary disks work out of the box. To change the samples, analyze keywords locally, run `python demo_seed.py export` in `backend/`, and commit the seed.
 
-1.  **Search volume**: Entered by you or fetched from DataForSEO.
-2.  **SERP parsing**: Every item on Google's first page is classified (organic, AI Overview, ads, local pack, images, People Also Ask…).
-3.  **Baseline click curve**: The share of searches that click each organic position, from [Advanced Web Ranking's CTR study](https://www.advancedwebranking.com/seo/organic-ctr) (19.4% at #1 down to 0.8% at #10).
-4.  **Feature effects**: Features that measurably take clicks scale the positions they affect. For example, an AI Overview cuts position 1 by about 52%. People Also Ask and videos carry no penalty, because the data shows none.
-5.  **Range**: Overlapping features are combined two ways (stacked vs strongest only) to give a low–high range around the estimate.
+Backend settings for a public deployment:
 
-For example, "what is a roth ira" at 10,000 searches a month comes out at about **2,060 capturable clicks (range 1,919–2,200)**.
+| Variable | Value | What it does |
+|---|---|---|
+| `DEMO_MODE` | `true` | Read-only demo |
+| `ALLOWED_ORIGINS` | `https://your-frontend.example.com` | Only your site's pages may call the API (exact origin, including `https://`) |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Requests per visitor per minute; `429` with `Retry-After` beyond that |
+| `TRUST_PROXY_HEADERS` | `true` | Behind a host's proxy: read the visitor's IP and `https` from forwarded headers |
+| `TRUSTED_PROXY_HOPS` | `1` (`2` with a CDN in front) | How many of your own proxies add to `X-Forwarded-For` |
+| `SERPAPI_API_KEY` | *(leave empty)* | The demo doesn't need a server key |
 
-The full method, every number and its source, a worked example and the limitations are in **[METHODOLOGY.md](METHODOLOGY.md)**.
+The frontend needs one value **at build time**, because Next.js bakes it into the JavaScript: `NEXT_PUBLIC_API_BASE_URL=https://your-backend.example.com` (a Docker build argument).
 
----
+Other protections: a Content Security Policy with a per-request nonce (`frontend/proxy.ts`) so the page can only run its own scripts and only talk to the API; keys refused over plain HTTP except on localhost; HSTS; `Cache-Control: no-store`; both containers run as non-root users.
 
-## 🏗️ Technical Architecture
-For detailed information on system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
+## Design decisions
+
+- **Free data sources first.** The project started on DataForSEO; when the paid credits ran out, it was redesigned around a provider interface, so SerpApi, Serper, DataForSEO and mock data are interchangeable.
+- **A range, not a single number.** When several features overlap, their combined effect isn't well studied, so Startly shows both the stacked and the strongest-only result.
+- **Bring your own key** instead of a shared server key: the demo costs nothing to run, and visitors' searches stay private.
+- **SQLite.** One file, no database server. It fits a single-user tool and a read-only demo.
+- **One server process.** The rate limiter lives in memory, which is correct for a single process. Running several would need shared storage such as Redis; one process handles the expected load.
+
+## Known limits
+
+- The click model uses industry averages and hasn't been validated against real traffic yet.
+- Results pages are snapshots; the demo's samples are from October 2026.
+- Search volume has to be entered by hand unless DataForSEO is configured.
+- On free hosting tiers, the demo may take about a minute to wake up after a quiet period.
+
+## Project docs
+
+- **[METHODOLOGY.md](METHODOLOGY.md)**: the click model, every number and its source, a worked example, limitations.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: components, data flow, storage, security, containers.
+
+**Built with** Next.js 16, React 19, TypeScript and Tailwind CSS (frontend); FastAPI, SQLite and ReportLab (backend); Docker.

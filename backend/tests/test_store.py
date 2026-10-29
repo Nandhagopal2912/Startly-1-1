@@ -1,12 +1,5 @@
-import json
-import os
-import time
-
 from fastapi.testclient import TestClient
 
-from conftest import load_fixture
-
-import migrate_cache
 import store
 import usage
 from db import connect
@@ -59,38 +52,6 @@ def test_api_calls_counted_in_database():
     with connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM api_calls").fetchone()[0] == 1
     assert usage.calls_today() == 1
-
-
-def test_json_cache_is_imported_once(tmp_path, monkeypatch):
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    monkeypatch.setattr(migrate_cache, "CACHE_DIR", cache_dir)
-
-    serpapi_snap = {"keyword": "what is a roth ira", "provider": "serpapi", "keyword_data": {},
-                    "items": [{"type": "ai_overview"}, {"type": "organic"}]}
-    (cache_dir / "aaa.json").write_text(json.dumps(serpapi_snap), encoding="utf-8")
-    legacy = load_fixture("dataforseo_serp.json")  # pre-provider DataForSEO format
-    (cache_dir / "bbb.json").write_text(json.dumps(legacy), encoding="utf-8")
-    (cache_dir / "usage.json").write_text('{"2026-10-21": 1}', encoding="utf-8")
-    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
-    (cache_dir / "api_calls.log").write_text(
-        json.dumps({"at": now, "provider": "serpapi", "endpoint": "search", "keyword": "what is a roth ira"}) + "\n",
-        encoding="utf-8",
-    )
-    os.utime(cache_dir / "aaa.json")  # fresh mtime -> within TTL
-
-    migrate_cache.import_json_cache()
-
-    found = store.latest_snapshot("What is a Roth IRA", "United States", "English", False)
-    assert found is not None and found[1]["provider"] == "serpapi"
-    legacy_found = store.latest_snapshot("running shoes", "United States", "English", False)
-    assert legacy_found is not None and legacy_found[1]["provider"] == "dataforseo"
-    assert usage.calls_today() == 1
-    assert sorted(p.name for p in (cache_dir / "imported").iterdir()) == ["aaa.json", "api_calls.log", "bbb.json", "usage.json"]
-
-    migrate_cache.import_json_cache()  # second run finds nothing new
-    with connect() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM serp_snapshots").fetchone()[0] == 2
 
 
 def test_history_stores_click_range():

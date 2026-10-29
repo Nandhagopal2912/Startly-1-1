@@ -10,8 +10,6 @@ BACKEND_DIR = Path(__file__).resolve().parent
 load_dotenv(BACKEND_DIR / ".env")
 load_dotenv()
 
-CACHE_DIR = BACKEND_DIR / "cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def env_clean(name: str) -> str | None:

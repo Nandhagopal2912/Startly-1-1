@@ -47,7 +47,7 @@ A local SQLite database at `backend/data/startly.db`:
 | `analyses` | One row per analysis, including the click range (`GET /history`) |
 | `api_calls` | Paid calls, used for the daily cap |
 
-`migrate_cache.py` imports the pre-SQLite JSON cache once on startup. `init_db()` adds new columns to older databases.
+`init_db()` adds new columns to older databases. In demo mode, an empty database is filled with the sample keywords from `demo_data/seed.json` (`demo_seed.py`), so a fresh container needs no database file.
 
 ### Own-key requests (`backend/stateless.py`)
 Requests that carry an `X-SerpApi-Key` header are stateless: the search runs on the visitor's key, nothing is written to the database, and the server's daily cap doesn't apply. The response includes the normalized results page (`snapshot`), which the browser keeps (`frontend/lib/ownKey.ts`) and sends back to `POST /rescore` (re-score after a volume edit) or as `previous` on a re-check (compare with the last check). Incoming snapshots are size- and shape-limited.
@@ -68,10 +68,21 @@ It combines the snapshot, the volume and the click model into the API response:
 *   `app/history/page.tsx`: searchable list of every saved analysis; clicking one reopens it (`/?open=<id>`).
 *   Detail components, in page order: `VerdictHero` (verdict, clicks, position values, editable volume), `Recommendations`, `PageOne` (who ranks and each position's clicks), `WhatChanged` (re-check and comparison), `DetailsPanel` (full write-up, page items, sources).
 *   `KeywordList` (sort, remove, export) and `BulkAnalysis` (cost preview, ranked results).
-*   `lib/analysis.ts`: shared row type, helpers, API calls and per-browser dashboard settings; `components/AnalyzeReport.tsx`: response types.
+*   `CreditsStatus` (normal mode: data source switch, credit balances, daily cap) and `KeyDialog` (demo: add, check or forget your own SerpApi key).
+*   `lib/analysis.ts`: shared row type, helpers, API calls and per-browser dashboard settings; `lib/ownKey.ts`: the visitor's key and own-key analyses, kept in the browser; `components/AnalyzeReport.tsx`: response types.
+*   `proxy.ts`: sets the Content Security Policy with a fresh nonce on every page request.
 
-### 6. Export engine (`backend/report_export.py`)
-ReportLab PDF and CSV exports built from the same data as the dashboard, including the click range, clicks by position, and the model's sources.
+### 6. Export engine
+Built from the same data as the dashboard, so exports need no API calls.
+*   `report_pdf.py`: the PDF report (ReportLab), with a cover, contents, summary, charts, a page per keyword and the method and sources. `pdf_fonts.py` registers the bundled Noto fonts (`fonts/`) so any language renders.
+*   `report_export.py`: the keyword and rankings CSVs (UTF-8 for Excel, protected against formula injection).
+*   `report_data.py`: helpers both share.
+
+### 7. Public demo and security
+*   `DEMO_MODE` (`config.py`): read-only. Only saved results pages are served, nothing is written, and no provider is called with the server's keys.
+*   `ratelimit.py`: per-IP requests per minute, kept in memory. Behind a proxy it reads `X-Forwarded-For` from the right, so clients can't fake their address.
+*   `security.py`: refuses visitor keys over plain HTTP (except localhost), adds HSTS on HTTPS and `Cache-Control: no-store`.
+*   `credits.py`: balances of the server's SerpApi and Serper keys (normal mode only).
 
 ## 🔄 Sequence Workflows
 
@@ -83,18 +94,26 @@ ReportLab PDF and CSV exports built from the same data as the dashboard, includi
 5.  **Presentation**: The frontend renders the cards, the chart and the insights. With no volume, it shows click-through rates instead of click counts.
 
 ### Reporting Flow
-1.  **Trigger**: The user clicks "Export PDF" or "CSV Dataset".
+1.  **Trigger**: The user picks a format and scope (all keywords or the selected one) in the **Export** menu.
 2.  **Payload**: The frontend sends the analyses already on screen, so no API calls are needed.
 3.  **Generation**: The backend returns the file, and the browser downloads it.
 
+## 🐳 Containers
+Each app has its own `Dockerfile`:
+*   `backend/Dockerfile`: Python 3.13 slim, runs as a non-root user, listens on `$PORT` (default 8000).
+*   `frontend/Dockerfile`: a two-stage build. The first stage installs everything and runs `next build` with `NEXT_PUBLIC_API_BASE_URL` passed as a build argument; the final image holds only Next's standalone server and static files.
+
+`docker-compose.yml` in the project root runs both as the public demo. The backend keeps no state worth saving in demo mode (the seed refills it on start), so no volume is needed.
+
 ## 🧪 Tests
-`backend/tests/` runs offline with a temporary database and no API keys. It covers providers, the click model (checked against AWR's measured effects), scoring, storage and migrations, and the API endpoints.
+`backend/tests/` runs offline with a temporary database and no API keys. It covers providers, the click model (checked against AWR's measured effects), scoring, storage and migrations, the demo seed, security and rate limiting, exports, and the API endpoints.
 
 ```bash
 cd backend && pytest
 ```
 
 ## 🛠️ Tech Stack
-*   **Frontend**: Next.js 16 (React 19), TypeScript, Tailwind CSS, Framer Motion, Chart.js, Lucide.
-*   **Backend**: FastAPI (Python 3.10+), Pydantic, Requests, SQLite, ReportLab.
+*   **Frontend**: Next.js 16 (React 19), TypeScript, Tailwind CSS, Framer Motion, Lucide.
+*   **Backend**: FastAPI (Python 3.10+; the Docker image uses 3.13), Pydantic, Requests, SQLite, ReportLab.
+*   **Deployment**: Docker, Docker Compose.
 *   **Data**: SerpApi, Serper or DataForSEO (SERP); user input or DataForSEO (volume).

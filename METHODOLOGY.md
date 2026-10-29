@@ -96,6 +96,8 @@ SerpApi returned 6 organic results, an AI Overview, ads, People Also Ask and a v
 
 People Also Ask and the video change nothing. A plain page with six organic results would send about 4,346 clicks, so these features remove about 53%. Startly's earlier flat-penalty model reported 5,500 for the same keyword.
 
+This example uses the results page from October 21, 2026. A re-check on October 24 found no ads and seven organic results, so the estimate rose to about 2,305 clicks with no range (one feature left, so stacked and strongest-only agree). That is what the demo shows. Results pages change, so every estimate belongs to the date of its snapshot.
+
 ## 7. Limitations
 
 - **Averages, not this keyword.** The curves average millions of results pages. A single keyword can differ by 2× or more because of intent, brand strength, title quality or device mix. The model is most reliable for **comparing** keywords, since the same assumptions apply to all of them.

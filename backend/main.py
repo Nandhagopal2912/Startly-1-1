@@ -17,7 +17,6 @@ from bulk import BulkRequest, bulk_analyze, bulk_preview, dedupe_keywords
 from db import init_db
 from demo_seed import load_seed_if_empty
 from history import get_full_analysis, latest_full_analyses
-from migrate_cache import import_json_cache
 from ratelimit import RateLimitMiddleware
 from security import SecurityMiddleware
 from providers import get_serp_provider, get_volume_provider
@@ -32,7 +31,6 @@ from usage import calls_today
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    import_json_cache()
     if config.demo_mode():
         load_seed_if_empty()
     yield
