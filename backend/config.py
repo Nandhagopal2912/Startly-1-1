@@ -80,5 +80,5 @@ def trust_proxy_headers() -> bool:
 
 
 def trusted_proxy_hops() -> int:
-    """How many proxies of yours add to X-Forwarded-For: 1 for a host's proxy, 2 with a CDN such as Cloudflare in front."""
+    """How many of the host's proxies add to X-Forwarded-For: 1 behind a single proxy, 3 on Render (Cloudflare, load balancer, internal proxy)."""
     return max(1, env_int("TRUSTED_PROXY_HOPS", 1))

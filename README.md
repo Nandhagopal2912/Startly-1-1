@@ -114,7 +114,7 @@ Backend settings for a public deployment:
 | `ALLOWED_ORIGINS` | `https://your-frontend.example.com` | Only your site's pages may call the API (exact origin, including `https://`) |
 | `RATE_LIMIT_PER_MINUTE` | `30` | Requests per visitor per minute; `429` with `Retry-After` beyond that |
 | `TRUST_PROXY_HEADERS` | `true` | Behind a host's proxy: read the visitor's IP and `https` from forwarded headers |
-| `TRUSTED_PROXY_HOPS` | `1` (`2` with a CDN in front) | How many of your own proxies add to `X-Forwarded-For` |
+| `TRUSTED_PROXY_HOPS` | `3` on Render; `1` behind a single proxy | How many proxies of your host add to `X-Forwarded-For`. On Render, a request passes Cloudflare, Render's load balancer and an internal proxy, so the visitor is 3rd from the right (measured October 2026; recheck if rate limiting stops working) |
 | `SERPAPI_API_KEY` | *(leave empty)* | The demo doesn't need a server key |
 
 The frontend needs one value **at build time**, because Next.js bakes it into the JavaScript: `NEXT_PUBLIC_API_BASE_URL=https://your-backend.example.com` (a Docker build argument).
